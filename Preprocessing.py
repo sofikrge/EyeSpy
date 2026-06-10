@@ -2,6 +2,9 @@ from Settings import EYE_OFFSET
 import polars as pl
 import matplotlib.pyplot as plt
 import os
+import Plots as plots
+import copy
+from pathlib import Path
 
 def shift_gaze_offset(dataset, eye_offset=EYE_OFFSET):
     """Shift gaze coordinates by a specified offset for left and right eyes."""
@@ -57,7 +60,7 @@ def filter_and_report_validations(dataset, data_quality_folder,
         ]
 
         if any(is_bad):
-            _plot_validation_quality(g, v_times, is_bad, s_id, p_id, data_quality_folder)
+            plots.plot_validation_quality(g, v_times, is_bad, s_id, p_id, data_quality_folder)
 
         if good_intervals:
             keep_mask = pl.any_horizontal([
@@ -72,19 +75,102 @@ def filter_and_report_validations(dataset, data_quality_folder,
         save_path = os.path.join(data_quality_folder, "validations.csv")
         pl.concat(all_val_data).write_csv(save_path)
 
-def _plot_validation_quality(g, v_times, is_bad, s_id, p_id, folder):
-    """Plot gaze x-position with validation intervals, highlighting bad ones."""
-    plt.figure(figsize=(15, 5))
-    plt.plot(g.samples["time"], g.samples["position"].list.get(0),
-             color='grey', alpha=0.6, linewidth=0.5)
+def parse_blink_intervals(file_path):
+    """Extract (onset, offset) tuples for each EBLINK line in an .asc file."""
+    intervals = []
+    with open(file_path) as f:
+        for line in f:
+            if line.startswith("EBLINK"):
+                parts = line.split()
+                intervals.append((int(parts[2]), int(parts[3])))
+    return intervals
 
-    for j, bad in enumerate(is_bad):
-        plt.axvline(x=v_times[j], color='#b3cde3', linestyle='--', alpha=0.8)
-        if bad:
-            plt.axvspan(v_times[j], v_times[j + 1], color='#88419d', alpha=0.2)
 
-    plt.title(f"Validations Data Quality: Participant {p_id} (Session {s_id})")
-    plt.xlabel("Time (ms)")
-    plt.ylabel("X Position (Visual Degrees)")
-    plt.savefig(os.path.join(folder, f"validations_plot_{s_id}_{p_id}.svg"))
-    plt.close()
+def count_events(df):
+    """Return (n_fixations, n_saccades) in a polars frame, in one pass."""
+    counts = df.group_by("name").agg(pl.len().alias("n"))
+    counts_dict = dict(zip(counts["name"], counts["n"]))
+    return counts_dict.get("fixation", 0), counts_dict.get("saccade", 0)
+
+
+def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
+                                 hx, hy, center_radius_dg, data_quality_folder,
+                                 debug=False, image_size_deg=None, filter_palette=None):
+    """
+    Remove events that overlap blinks, fall outside the image, or fall inside the
+    center radius. Tracks counts at each stage, saves a QC CSV, and (if debug)
+    plots the filtering result per session.
+    """
+
+    print("\nBlink and Spatial Filtering of Events...")
+    os.makedirs(data_quality_folder, exist_ok=True)
+
+    # Only keep a pre-filter copy if we're actually going to plot it
+    events_prefilter = [copy.deepcopy(ev) for ev in dataset.events] if debug else None
+
+    qc_data = []
+    for i, ev in enumerate(dataset.events):
+        p_id = dataset.fileinfo['gaze']['participant_id'][i]
+        s_id = dataset.fileinfo['gaze']['session_id'][i]
+        file_name = f"s_{s_id}_{p_id}.asc"
+
+        df = ev.frame
+        qc = {'participant_id': p_id, 'session_id': s_id}
+        qc['fix_initial'], qc['sac_initial'] = count_events(df)
+
+        # 1. Blink filtering
+        blink_intervals = parse_blink_intervals(os.path.join(raw_data_dir, file_name))
+        qc['blinks_detected'] = len(blink_intervals)
+
+        if blink_intervals:
+            overlap_expr = pl.lit(False)
+            for b_on, b_off in blink_intervals:
+                overlap_expr |= (
+                    ((pl.col("name") == "fixation") &
+                     (pl.col("onset") <= b_off + buffer_fix) &
+                     (pl.col("offset") >= b_on - buffer_fix)) |
+                    ((pl.col("name") == "saccade") &
+                     (pl.col("onset") <= b_off + buffer_sac) &
+                     (pl.col("offset") >= b_on - buffer_sac))
+                )
+            df = df.filter(~overlap_expr)
+
+        # 2. Spatial filtering - add coordinates and distance from center
+        df = df.with_columns(
+            pl.col("location").list.get(0).alias("x"),
+            pl.col("location").list.get(1).alias("y"),
+        ).with_columns((pl.col("x") ** 2 + pl.col("y") ** 2).sqrt().alias("r"))
+
+        # 2a. Outside image bounds
+        outside_mask = (pl.col("x").abs() > hx) | (pl.col("y").abs() > hy)
+        qc['fix_outside'], qc['sac_outside'] = count_events(df.filter(outside_mask))
+        df = df.filter(~outside_mask)
+
+        # 2b. Inside center radius
+        center_mask = pl.col("r") <= center_radius_dg
+        qc['fix_center'], qc['sac_center'] = count_events(df.filter(center_mask))
+        df = df.filter(~center_mask)
+
+        qc['fix_final'], qc['sac_final'] = count_events(df)
+
+        ev.frame = df.rename({"r": "dist_from_center"})
+        qc_data.append(qc)
+
+    # Save QC report
+    qc_df = pl.DataFrame(qc_data).select([
+        'participant_id', 'session_id', 'blinks_detected',
+        'fix_initial', 'sac_initial', 'fix_outside', 'sac_outside',
+        'fix_center', 'sac_center', 'fix_final', 'sac_final'
+    ])
+    qc_df.write_csv(os.path.join(data_quality_folder, "blink_spatial_filtering.csv"))
+
+    if debug:
+        plot_fixation_filtering(
+            events_list=events_prefilter, fileinfo=dataset.fileinfo,
+            image_size_deg=image_size_deg, center_radius_dg=center_radius_dg,
+            raw_data_dir=raw_data_dir, buffer_fix=buffer_fix,
+            save_dir=Path(data_quality_folder) / "blinkspatial_filter",
+            colors=filter_palette or ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
+        )
+
+    return qc_df
