@@ -1,9 +1,9 @@
 # Preprocessing.py
 
-from Settings import EYE_OFFSET
+from Settings import EYE_OFFSET, FILTER_PALETTE, PHASE_PALETTE, MAT_FIELD_MAP
 import polars as pl
 import os
-import Plots as plots
+import Scripts.Preprocessing.Plots as plots
 import copy
 from pathlib import Path
 import numpy as np
@@ -17,8 +17,8 @@ def shift_gaze_offset(dataset, eye_offset=EYE_OFFSET):
         te = md.get("tracked_eye")
         
         # Determine eye and offset
-        eye = "left" if str(te or "R").strip().upper() in ("L", "LEFT") else "right"
-        off = eye_offset.get(eye, 0.0)
+        eye = "left" if str(te or "R").strip().upper() in ("L", "LEFT") else "right" # if empty default to right, normalise naming
+        off = eye_offset.get(eye, 0.0) # look up offset for this eye, default to 0 if not found
         
         # Apply offset
         g.samples = g.samples.with_columns(
@@ -28,8 +28,7 @@ def shift_gaze_offset(dataset, eye_offset=EYE_OFFSET):
         
     return dataset
 
-def filter_and_report_validations(dataset, data_quality_folder,
-                                   avg_threshold, max_threshold):
+def filter_and_report_validations(dataset, data_quality_folder, avg_threshold, max_threshold):
     """Save a CSV summary of all validations, then filter out gaze samples
     that fall in 'bad' validation intervals (and plot sessions with bad data)."""
 
@@ -43,28 +42,29 @@ def filter_and_report_validations(dataset, data_quality_folder,
         if g.validations is None:
             continue
 
-        s_id = fileinfo.get_column('session_id')[i]
-        p_id = fileinfo.get_column('participant_id')[i]
+        session_id = fileinfo.get_column('session_id')[i]
+        participant_id = fileinfo.get_column('participant_id')[i]
 
         val_df = g.validations.sort("time")
-        all_val_data.append(
-            val_df.with_columns(session_id=pl.lit(s_id), participant_id=pl.lit(p_id))
-        )
+        all_val_data.append( # for csv saving tagging with session and participant
+            val_df.with_columns(session_id=pl.lit(session_id), participant_id=pl.lit(participant_id)))
 
         # Build interval boundaries: each validation marks the start of an interval,
-        # and the last sample's time marks the end of the final one.
+        # and the last sample's time marks the end of the final one
         v_times = val_df["time"].to_list() + [g.samples["time"].max() + 1]
-        is_bad = [
-            (avg > avg_threshold or mx > max_threshold)
-            for avg, mx in zip(val_df["accuracy_avg"], val_df["accuracy_max"])
-        ]
-        good_intervals = [
-            (v_times[j], v_times[j + 1]) for j, bad in enumerate(is_bad) if not bad
-        ]
+        
+        # flag bad intervals based on thresholds
+        is_bad = [(avg > avg_threshold or mx > max_threshold)
+            for avg, mx in zip(val_df["accuracy_avg"], val_df["accuracy_max"])]
 
+        # build good intervals based on bad flags: each bad validation marks the start of a bad interval, and the next validation marks its end
+        good_intervals = [(v_times[j], v_times[j + 1]) for j, bad in enumerate(is_bad) if not bad]
+
+        # only generate plot if at least one validation is bad
         if any(is_bad):
-            plots.plot_validation_quality(g, v_times, is_bad, s_id, p_id, data_quality_folder)
+            plots.plot_validation_quality(g, v_times, is_bad, session_id, participant_id, data_quality_folder)
 
+        # create boolean mask for samples to keep
         if good_intervals:
             keep_mask = pl.any_horizontal([
                 (pl.col("time") >= start) & (pl.col("time") < end)
@@ -74,12 +74,14 @@ def filter_and_report_validations(dataset, data_quality_folder,
         else:
             g.samples = g.samples.filter(pl.lit(False))
 
+    # concat all validation data and save to csv for reporting
     if all_val_data:
         save_path = os.path.join(data_quality_folder, "validations.csv")
         pl.concat(all_val_data).write_csv(save_path)
 
 def count_events(df):
     """Return (n_fixations, n_saccades) in a polars frame, in one pass."""
+    # needed for filter_events_blink_spatial to track counts at each stage of filtering
     counts = df.group_by("name").agg(pl.len().alias("n"))
     counts_dict = dict(zip(counts["name"], counts["n"]))
     return counts_dict.get("fixation", 0), counts_dict.get("saccade", 0)
@@ -105,54 +107,61 @@ def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
         s_id = dataset.fileinfo['gaze']['session_id'][i]
         file_name = f"s_{s_id}_{p_id}.asc"
 
-        df = ev.frame
+        # record starting fix sacc before any filtering
+        df = ev.frame # working copy
         qc = {'participant_id': p_id, 'session_id': s_id}
         qc['fix_initial'], qc['sac_initial'] = count_events(df)
 
         # 1. Blink filtering
-        blink_intervals = plots.parse_blink_intervals(os.path.join(raw_data_dir, file_name))
+        blink_intervals = plots.parse_blink_intervals(os.path.join(raw_data_dir, file_name)) # extract all blinks
         qc['blinks_detected'] = len(blink_intervals)
 
-        if blink_intervals:
+        if blink_intervals: # if there are blinks, filter out events overlapping them + their buffers
             overlap_expr = pl.lit(False)
             for b_on, b_off in blink_intervals:
                 overlap_expr |= (
                     ((pl.col("name") == "fixation") &
-                     (pl.col("onset") <= b_off + buffer_fix) &
-                     (pl.col("offset") >= b_on - buffer_fix)) |
+                     (pl.col("onset") <= b_off + buffer_fix) & (pl.col("offset") >= b_on - buffer_fix)) |
                     ((pl.col("name") == "saccade") &
-                     (pl.col("onset") <= b_off + buffer_sac) &
-                     (pl.col("offset") >= b_on - buffer_sac))
-                )
+                     (pl.col("onset") <= b_off + buffer_sac) & (pl.col("offset") >= b_on - buffer_sac)))
             df = df.filter(~overlap_expr)
+
+
 
         # 2. Spatial filtering - add coordinates and distance from center
         df = df.with_columns(
             pl.col("location").list.get(0).alias("x"),
             pl.col("location").list.get(1).alias("y"),
-        ).with_columns((pl.col("x") ** 2 + pl.col("y") ** 2).sqrt().alias("r"))
+        ).with_columns((pl.col("x") ** 2 + pl.col("y") ** 2).sqrt().alias("dist_from_center"))
 
         # 2a. Outside image bounds
         outside_mask = (pl.col("x").abs() > hx) | (pl.col("y").abs() > hy)
-        qc['fix_outside'], qc['sac_outside'] = count_events(df.filter(outside_mask))
+        fix_before, sac_before = count_events(df)
         df = df.filter(~outside_mask)
+        fix_after, sac_after = count_events(df)
+        qc['fix_outside'] = fix_before - fix_after
+        qc['sac_outside'] = sac_before - sac_after
 
         # 2b. Inside center radius
-        center_mask = pl.col("r") <= center_radius_dg
-        qc['fix_center'], qc['sac_center'] = count_events(df.filter(center_mask))
+        center_mask = pl.col("dist_from_center") <= center_radius_dg
+        fix_before, sac_before = count_events(df)
         df = df.filter(~center_mask)
+        fix_after, sac_after = count_events(df)
+        qc['fix_center'] = fix_before - fix_after
+        qc['sac_center'] = sac_before - sac_after
 
-        qc['fix_final'], qc['sac_final'] = count_events(df)
+        qc['fix_final'], qc['sac_final'] = fix_after, sac_after
 
-        ev.frame = df.rename({"r": "dist_from_center"})
+        ev.frame = df
         qc_data.append(qc)
+
+
 
     # Save QC report
     qc_df = pl.DataFrame(qc_data).select([
         'participant_id', 'session_id', 'blinks_detected',
-        'fix_initial', 'sac_initial', 'fix_outside', 'sac_outside',
-        'fix_center', 'sac_center', 'fix_final', 'sac_final'
-    ])
+        'fix_initial', 'fix_outside', 'fix_center', 'fix_final',
+        'sac_initial',  'sac_outside', 'sac_center',  'sac_final'])
     qc_df.write_csv(os.path.join(data_quality_folder, "blink_spatial_filtering.csv"))
 
     if debug:
@@ -161,8 +170,7 @@ def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
             image_size_deg=image_size_deg, center_radius_dg=center_radius_dg,
             raw_data_dir=raw_data_dir, buffer_fix=buffer_fix,
             save_dir=Path(data_quality_folder) / "blinkspatial_filter",
-            colors=filter_palette or ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
-        )
+            colors=filter_palette or FILTER_PALETTE)
 
     return qc_df
 
@@ -174,8 +182,8 @@ def _find_expdata_struct(mat):
     return None
 
 def _is_ghost_trial(t):
-    """A 'ghost' trial is an empty placeholder row with no TrialNum data."""
-    t_num = getattr(t, 'TrialNum', None)
+    """A 'ghost' trial is an empty placeholder row with no TrialNum data. This function detects that case so it can be skipped"""
+    t_num = getattr(t, 'TrialNum', None) # access matlab truct to be loaded viea scipy
     return isinstance(t_num, np.ndarray) and t_num.size == 0
 
 def load_behavioural_from_mat(mat_path, section_map):
@@ -190,7 +198,7 @@ def load_behavioural_from_mat(mat_path, section_map):
         return pl.DataFrame()
 
     try:
-        mat = sio.loadmat(mat_path, squeeze_me=True, struct_as_record=False)
+        mat = sio.loadmat(mat_path, squeeze_me=True, struct_as_record=False) # turn into flat scalar struct, remove dimensions, turn to python object
         expdata = _find_expdata_struct(mat)
         if expdata is None:
             print(f"   ❌ Key 'expdata' (or similar) not found in {os.path.basename(mat_path)}")
@@ -199,16 +207,7 @@ def load_behavioural_from_mat(mat_path, section_map):
         print(f"   ❌ Error reading MAT structure: {e}")
         return pl.DataFrame()
 
-    # MAT field name -> output column name
-    field_map = {
-        'BlockNum': 'BlockNum',
-        'ImageName': 'ImageName',
-        'did_answer_PAS_Q': 'DidRespondPas',
-        'NumRepetitionFixationFail': 'NumRepetitionFixationFail',
-        'response_PAS_Q': 'response_PAS_Q',
-    }
-
-    beh_rows = []
+    beh_rows = [] # loop over eachv section (e.g. practice, block1) and extract trials, order matches ASC
     for section_field, block_name in section_map.items():
         if not hasattr(expdata, section_field):
             continue
@@ -222,7 +221,7 @@ def load_behavioural_from_mat(mat_path, section_map):
                 continue
 
             row = {'block_type': block_name, 'trial_number': i + 1}
-            row.update({out: getattr(t, src, None) for src, out in field_map.items()})
+            row.update({out: getattr(t, src, None) for src, out in MAT_FIELD_MAP.items()})
             beh_rows.append(row)
 
     df = pl.DataFrame(beh_rows, infer_schema_length=None)
@@ -239,7 +238,6 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
     and save the result. If debug, also run the phase-alignment QC plots.
     """
 
-    print("\nAssigning trial metadata and image phases to events...")
     os.makedirs(events_out_dir, exist_ok=True)
 
     for i, ev in enumerate(dataset.events):
@@ -295,11 +293,10 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
 
         # Select final columns, ensuring all expected columns exist
         desired_cols = [
-            "name", "onset", "offset", "duration", "location",
+            "name", "onset", "offset", "duration", "x","y", "dist_from_center",
             "amplitude", "peak_velocity", "dispersion", "disposition",
-            "block_type", "trial_number", "condition", "phase",
-            "x", "y",
-            "BlockNum", "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q"
+            "block_type", "BlockNum", "trial_number", "condition", "phase",
+            "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q"
         ]
         for col in desired_cols:
             if col not in ev_df.columns:
@@ -323,7 +320,7 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             save_dir=os.path.join(data_quality_folder, "phase_alignment_checks"),
             labels=trial_labels,
             patterns=asc_patterns,
-            colors=phase_palette or ['#b3cde3', '#8c96c6', '#88419d']
+            colors=phase_palette or PHASE_PALETTE
         )
 
 def _stringify_list_columns(df):
@@ -331,7 +328,9 @@ def _stringify_list_columns(df):
     df = df.clone()
     for col, dtype in zip(df.columns, df.dtypes):
         if isinstance(dtype, pl.List):
-            df = df.with_columns(pl.col(col).map_elements(str, return_dtype=pl.String))
+            df = df.with_columns(
+                ("[" + pl.col(col).list.eval(pl.element().cast(pl.String)).list.join(", ") + "]").alias(col)
+            )
     return df
 
 
@@ -343,7 +342,6 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
     save one cleaned CSV per session, and a combined CSV across all sessions.
     """
 
-    print("\nApplying final behavioral filtering...")
     os.makedirs(output_dir, exist_ok=True)
     combined = []
 
@@ -356,13 +354,8 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
         if s_id in exclude_sessions.get(p_id, []):
             continue
 
-        # PAS response filter depends on session type (Conscious vs Unconscious)
-        if "C" in s_id:
-            pas_mask = ~pl.col("response_PAS_Q").is_in([0, 1])
-        elif "U" in s_id:
-            pas_mask = ~pl.col("response_PAS_Q").is_in([1, 2, 3])
-        else:
-            pas_mask = pl.lit(True)
+        # Keep PAS 0, 2, 3 in both sessions, drop PAS 1
+        pas_mask = ~pl.col("response_PAS_Q").is_in([1])
 
         # Block exclusions specific to this participant/session
         bad_blocks = exclude_blocks.get(p_id, {}).get(s_id, [])
@@ -377,6 +370,14 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
             block_mask
         )
         ev.frame = ev.frame.filter(final_mask)
+
+        prefix = "conscious" if "C" in s_id else "unconscious"
+        ev.frame = ev.frame.with_columns(
+            pl.when(pl.col("response_PAS_Q") == 0)
+              .then(pl.lit(f"{prefix}_unaware"))
+              .otherwise(pl.lit(f"{prefix}_aware"))
+              .alias("awareness")
+        )
 
         # Save per-session CSV (list columns stringified for CSV compatibility)
         save_df = _stringify_list_columns(ev.frame)

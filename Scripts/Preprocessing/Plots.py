@@ -8,7 +8,8 @@ from pathlib import Path
 import matplotlib.patches as patches
 import random
 from bisect import bisect_left
-from FileParsing import parse_blink_intervals, parse_trials_from_asc
+from Scripts.Preprocessing.FileParsing import parse_blink_intervals, parse_trials_from_asc
+from Settings import FILTER_PALETTE, PHASE_PALETTE
 
 def plot_validation_quality(g, v_times, is_bad, s_id, p_id, folder):
     """Plot gaze x-position with validation intervals, highlighting bad ones."""
@@ -35,7 +36,7 @@ def plot_fixation_filtering(events_list, fileinfo, image_size_deg, center_radius
     save_dir.mkdir(parents=True, exist_ok=True)
 
     if colors is None:
-        colors = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
+        colors = FILTER_PALETTE
     color_map = {'blink': colors[1], 'outside': colors[2], 'center': colors[2], 'kept': colors[3]}
 
     hx, hy = image_size_deg[0] / 2, image_size_deg[1] / 2
@@ -176,7 +177,7 @@ def plot_phase_alignment_check(events_list, fileinfo, raw_data_dir, save_dir,
     save_dir.mkdir(parents=True, exist_ok=True)
 
     if colors is None:
-        colors = ['#b3cde3', '#8c96c6', '#88419d']  # [inter, mooney, disambig]
+        colors = PHASE_PALETTE
     palette_map = {'inter_stimulus': colors[0], 'mooney': colors[1], 'disambiguation': colors[2]}
 
     selected_indices = random.sample(range(len(events_list)), min(5, len(events_list)))

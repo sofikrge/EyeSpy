@@ -92,6 +92,15 @@ ASC_PATTERNS = {
 
 SECTION_TO_BLOCK = {"Trials_Practice": "Practice", "Trials_Experiment": "Experiment", "Trials_Extra": "Extra"}
 
+# MAT struct field name -> output column name (behavioural data merge)
+MAT_FIELD_MAP = {
+    'BlockNum': 'BlockNum',
+    'ImageName': 'ImageName',
+    'did_answer_PAS_Q': 'DidRespondPas',
+    'NumRepetitionFixationFail': 'NumRepetitionFixationFail',
+    'response_PAS_Q': 'response_PAS_Q',
+}
+
 EXCLUDE_SUBJECTS = [] 
 # Format: { ParticipantID: ['SessionLetter'] } 
 
@@ -113,3 +122,7 @@ EXCLUDE_BLOCKS = {
     117: {'C': [1]},                # Technical mistake
 #    119: {'U': [1, 2, 3, 4, 5, 6]}  # Unfocused eyes sometimes
 }
+
+# PLotting colors
+FILTER_PALETTE = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
+PHASE_PALETTE  = ['#b3cde3', '#8c96c6', '#88419d']

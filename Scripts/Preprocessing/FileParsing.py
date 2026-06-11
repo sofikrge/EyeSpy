@@ -95,3 +95,4 @@ def parse_trials_from_asc(file_path, labels, patterns):
         .drop("_has_data")
     )
     return df.sort("trial_start")
+
