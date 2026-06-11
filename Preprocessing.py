@@ -2,7 +2,6 @@
 
 from Settings import EYE_OFFSET
 import polars as pl
-import matplotlib.pyplot as plt
 import os
 import Plots as plots
 import copy
@@ -310,10 +309,7 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
         ev.frame = final_df
 
         if debug:
-            save_df = final_df.clone()
-            for col, dtype in zip(save_df.columns, save_df.dtypes):
-                if isinstance(dtype, pl.List):
-                    save_df = save_df.with_columns(pl.col(col).map_elements(str, return_dtype=pl.String))
+            save_df = _stringify_list_columns(final_df)
             save_path = os.path.join(events_out_dir, csv_name)
             save_df.write_csv(save_path)
             print(f"Saved events with metadata to {save_path}")
