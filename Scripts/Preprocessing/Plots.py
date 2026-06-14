@@ -63,15 +63,13 @@ def plot_fixation_filtering(events_list, fileinfo, image_size_deg, center_radius
 def _label_fixations(df, blink_intervals, buffer_fix, hx, hy, center_radius_dg):
     """Add x, y, r columns and a 'reason' column via sequential filtering logic."""
 
-    overlap_expr = pl.lit(False)
-    for b_on, b_off in blink_intervals:
-        overlap_expr |= (
-            (pl.col("onset") <= b_off + buffer_fix) &
-            (pl.col("offset") >= b_on - buffer_fix)
-        )
+    overlap_exprs = [
+        ((pl.col("onset") <= b_off + buffer_fix) & (pl.col("offset") >= b_on - buffer_fix))
+        for b_on, b_off in blink_intervals
+    ]
 
     df = df.with_columns(
-        overlap_expr.alias("blink_overlap"),
+        pl.any_horizontal(overlap_exprs).alias("blink_overlap") if overlap_exprs else pl.lit(False).alias("blink_overlap"),
         pl.col("location").list.get(0).alias("x"),
         pl.col("location").list.get(1).alias("y"),
     ).with_columns((pl.col("x") ** 2 + pl.col("y") ** 2).sqrt().alias("r"))

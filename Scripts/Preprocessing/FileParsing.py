@@ -24,6 +24,7 @@ def parse_trials_from_asc(file_path, labels, patterns):
     pat_image = patterns['image']
     pat_msg   = patterns['msg']
 
+    label_vals = tuple(labels.values())
     with open(file_path, 'r', encoding="utf-8", errors="ignore") as f:
         for line in f:
             if (m := pat_trial.search(line)):
@@ -33,7 +34,7 @@ def parse_trials_from_asc(file_path, labels, patterns):
                 ts, img_num = int(m.group(1)), int(m.group(2))
                 image_map[ts] = img_num
             elif "MSG" in line:
-                if any(c in line for c in labels.values()):
+                if any(c in line for c in label_vals):
                     if (m := pat_msg.search(line)):
                         ts, code = int(m.group(1)), m.group(2)
                         p_type = None

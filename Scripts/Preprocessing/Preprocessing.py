@@ -117,14 +117,12 @@ def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
         qc['blinks_detected'] = len(blink_intervals)
 
         if blink_intervals: # if there are blinks, filter out events overlapping them + their buffers
-            overlap_expr = pl.lit(False)
-            for b_on, b_off in blink_intervals:
-                overlap_expr |= (
-                    ((pl.col("name") == "fixation") &
-                     (pl.col("onset") <= b_off + buffer_fix) & (pl.col("offset") >= b_on - buffer_fix)) |
-                    ((pl.col("name") == "saccade") &
-                     (pl.col("onset") <= b_off + buffer_sac) & (pl.col("offset") >= b_on - buffer_sac)))
-            df = df.filter(~overlap_expr)
+            overlap_exprs = [
+                (((pl.col("name") == "fixation") & (pl.col("onset") <= b_off + buffer_fix) & (pl.col("offset") >= b_on - buffer_fix)) |
+                ((pl.col("name") == "saccade") & (pl.col("onset") <= b_off + buffer_sac) & (pl.col("offset") >= b_on - buffer_sac)))
+                for b_on, b_off in blink_intervals
+            ]
+            df = df.filter(~pl.any_horizontal(overlap_exprs))
 
 
 
@@ -298,9 +296,9 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             "block_type", "BlockNum", "trial_number", "condition", "phase",
             "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q"
         ]
-        for col in desired_cols:
-            if col not in ev_df.columns:
-                ev_df = ev_df.with_columns(pl.lit(None).alias(col))
+        missing_cols = {col: pl.lit(None) for col in desired_cols if col not in ev_df.columns}
+        if missing_cols:
+            ev_df = ev_df.with_columns(**missing_cols)
 
         final_df = ev_df.select(desired_cols)
         ev.frame = final_df
