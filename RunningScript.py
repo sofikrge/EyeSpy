@@ -1,9 +1,10 @@
-#!/usr/bin/env python3
 # RunningScript.py
 #%% Imports
 import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
+from Scripts.Analysis.NSSExporter import export_nss_fixations
+from Scripts.Analysis.NSSAnalysis import run_nss_analysis
 
 #%% How to use
 """
@@ -76,8 +77,18 @@ def main():
         exclude_subjects=settings.EXCLUDE_SUBJECTS,
         exclude_sessions=settings.EXCLUDE_SESSIONS,
         exclude_blocks=settings.EXCLUDE_BLOCKS)
+    
+    #%% NSS Analysis
+    print("\nExporting fixations for NSS analysis...")
+    export_nss_fixations(
+        input_dir=settings.EVENTS_CLEANED_DIR,
+        output_file="data/NSS_all_fixations_clean.parquet")
+
+    print("\nRunning NSS analysis...")
+    run_nss_analysis()
 
     #%% NSS Analysis
+
 
 if __name__ == "__main__":
     main()
