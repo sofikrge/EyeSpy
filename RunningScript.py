@@ -3,8 +3,8 @@
 import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
-from Scripts.Analysis.NSSExporter import export_nss_fixations
-from Scripts.Analysis.NSSAnalysis import run_nss_analysis
+from Scripts.Analysis.NewNSSExporter import export_nss_fixations
+from Scripts.Analysis.NewNSS import run_nss_analysis
 
 #%% How to use
 """
@@ -71,7 +71,7 @@ def main():
         phase_palette=settings.PHASE_PALETTE)
 
     print("\nApplying final behavioral filtering...")
-    combined_df = prep.apply_behavioral_filters_and_save(
+    prep.apply_behavioral_filters_and_save(
         dataset=settings.dataset,
         output_dir=settings.EVENTS_CLEANED_DIR,
         exclude_subjects=settings.EXCLUDE_SUBJECTS,
@@ -86,9 +86,6 @@ def main():
 
     print("\nRunning NSS analysis...")
     run_nss_analysis()
-
-    #%% NSS Analysis
-
 
 if __name__ == "__main__":
     main()
