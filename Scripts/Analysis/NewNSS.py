@@ -69,9 +69,6 @@ MIN_SUBJ_PER_GROUP_NSS   = 2   # min participants per fixmap group (within-phase
 MIN_SUBJ_PER_GROUP_CROSS = 2   # min participants per fixmap group (cross-phase)
 NAN_POLICY_CROSS         = "permissive"   # "permissive" or "matlab_strict"
 
-EXCLUDE_SUBJECTS = []
-EXCLUDE_SESSIONS = {"c": [], "u": []}
-
 DISPERSION_DDOF = 0   # 0 = population std; 1 = sample std
 
 # ── HELPER: which columns define a "group" for fixation map building ──────────
@@ -79,43 +76,24 @@ DISPERSION_DDOF = 0   # 0 = population std; 1 = sample std
 def _group_cols(blend: bool) -> list[str]:
     """
     Return the column names that define one fixation-map unit.
-    blend=True  → participant × image × session          (original)
-    blend=False → participant × image × session × trial  (per-trial)
+    blend=True  → participant × image × session          (previous code)
+    blend=False → participant × image × session × trial  (new, separating per-trial)
     """
     base = ["ImageName", "session", "image_type"]
     return base if blend else base + ["trial_number"]
 
 
-# ── LOAD & EXCLUSIONS ─────────────────────────────────────────────────────────
-
-def make_exclusion_mask(df: pd.DataFrame) -> np.ndarray:
-    m = np.zeros(len(df), dtype=bool)
-    if EXCLUDE_SUBJECTS:
-        excl = set(map(str, EXCLUDE_SUBJECTS))
-        m |= df["participant"].astype(str).isin(excl)
-    if EXCLUDE_SESSIONS and any(EXCLUDE_SESSIONS.values()):
-        p = df["participant"].astype(str)
-        c = df["session"].astype(str).str.lower()
-        for key, plist in EXCLUDE_SESSIONS.items():
-            ids = set(map(str, plist))
-            if ids:
-                m |= (c == key.lower()) & p.isin(ids)
-    return m
-
+# ── LOAD ─────────────────────────────────────────────────────────
 
 def load_fixations(path: Path = FIX_FILE) -> pd.DataFrame:
+    """Load the cleaned fixation data exported by NSSExporter.py."""
     if not path.exists():
         raise FileNotFoundError(f"Fixations parquet not found: {path}")
     df = pd.read_parquet(path)
-    mask = make_exclusion_mask(df)
-    if mask.any():
-        print(f"  Excluded {mask.sum():,} fixation rows via exclusion rules.")
-        df = df.loc[~mask].copy()
     if DEBUG:
         mode = "BLEND" if "trial_number" not in df.columns else "PER-TRIAL"
         print(f"  Loaded {len(df):,} fixation rows [{mode} mode detected from parquet].")
     return df
-
 
 # ── COORDINATE HELPERS ────────────────────────────────────────────────────────
 
@@ -139,11 +117,6 @@ def _meta_block(ppd, image_h, image_w, group_cols, *, tag, extra=None):
         "image_size":         (int(image_h), int(image_w)),
         "group_cols":         tuple(group_cols),
         "blend_trials":       BLEND_TRIALS,
-        "excluded_subjects":  tuple(sorted(map(str, EXCLUDE_SUBJECTS))),
-        "excluded_sessions":  tuple(sorted(
-            (k, tuple(sorted(map(str, EXCLUDE_SESSIONS.get(k, [])))))
-            for k in ("c", "u")
-        )),
         "format": tag,
     }
     if extra:
@@ -598,14 +571,14 @@ def calculate_NSS_crossphase(
             continue
 
         # Look up disambiguation reference maps
-        # In per-trial mode, look up by the same trial_number so we match
-        # the pre-mooney disambiguation exposure from the exact same trial.
         if blend:
             fm_intact    = fm_index.get((img, cond, "disamb_intact"))
             fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
         else:
-            fm_intact    = fm_index.get((img, cond, "disamb_intact",     trial_num))
-            fm_scrambled = fm_index.get((img, cond, "disamb_not_intact", trial_num))
+            # HYBRID LOOKUP: The Mooney image has a specific trial_number, 
+            # but we compare it against the blended "ALL_TRIALS" reference map.
+            fm_intact    = fm_index.get((img, cond, "disamb_intact",     "ALL_TRIALS"))
+            fm_scrambled = fm_index.get((img, cond, "disamb_not_intact", "ALL_TRIALS"))
 
         def _safe_ref(fm):
             if fm is None:
@@ -846,6 +819,18 @@ def run_nss_analysis(blend: bool = BLEND_TRIALS):
 
     # Detect mode from parquet content (trial_number present = per-trial)
     parquet_is_pertrial = "trial_number" in fixations.columns
+    
+    if not blend and parquet_is_pertrial:
+        # Convert column to object so we can put text in it
+        fixations["trial_number"] = fixations["trial_number"].astype(object)
+        
+        # Identify all disambiguating images
+        ref_mask = fixations["image_type"].isin(["disamb_intact", "disamb_not_intact"])
+        
+        # Force all reference images into a single "ALL_TRIALS" group 
+        # so they blend together to form a robust baseline map
+        fixations.loc[ref_mask, "trial_number"] = "ALL_TRIALS"
+    
     if blend and parquet_is_pertrial:
         print("  ⚠️  BLEND_TRIALS=True but parquet contains trial_number. "
               "Dropping it to enforce blend mode.")
