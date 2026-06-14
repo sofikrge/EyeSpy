@@ -96,7 +96,7 @@ def export_nss_fixations(
         raise RuntimeError("No files could be read. Check the input directory.")
 
     print(f"  Merging {len(dfs)} participant files...")
-    full_df = pl.concat(dfs, how="diagonal")   # diagonal = handle missing cols safely
+    full_df = pl.concat(dfs, how="diagonal_relaxed").with_columns(pl.col("onset").cast(pl.Float64, strict=False))
 
     print("  Classifying image types and extracting coordinates...")
 
@@ -141,6 +141,7 @@ def export_nss_fixations(
             "y_deg",
             "condition",
             "trial_number",
+            "awareness",
         ])
         .drop_nulls(subset=["image_type"])
     )

@@ -382,16 +382,21 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
         save_path = os.path.join(output_dir, f"s_{s_id}_{p_id}.csv")
         save_df.write_csv(save_path)
 
-        combined.append(save_df.with_columns(
+        risky_cols = ["response_PAS_Q", "DidRespondPas", "NumRepetitionFixationFail", "BlockNum"]
+        tagged = ev.frame.with_columns(
             session_id=pl.lit(s_id), participant_id=pl.lit(p_id)
-        ))
+        )
+        cast_exprs = [pl.col(c).cast(pl.Float64) for c in risky_cols if c in tagged.columns]
+        if cast_exprs:
+            tagged = tagged.with_columns(cast_exprs)
+        combined.append(tagged)
 
     print(f"Cleaned events saved to {output_dir}")
 
     if combined:
-        combined_df = pl.concat(combined)
+        combined_df = pl.concat(combined, how="diagonal")
         combined_path = os.path.join(output_dir, "all_events_cleaned.csv")
-        combined_df.write_csv(combined_path)
+        _stringify_list_columns(combined_df).write_csv(combined_path)
         print(f"Combined cleaned events saved to {combined_path}")
         return combined_df
 

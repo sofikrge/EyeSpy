@@ -4,7 +4,9 @@ import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
 from Scripts.Analysis.NewNSSExporter import export_nss_fixations
-from Scripts.Analysis.NewNSS import run_nss_analysis
+from Scripts.Analysis.NSSWithinPhase import run_within_phase_nss
+from Scripts.Analysis.NSSCrossPhase import run_cross_phase_nss
+from Scripts.Analysis.NSSUtils import BLEND_TRIALS
 
 #%% How to use
 """
@@ -46,7 +48,7 @@ settings.dataset.detect_events('microsaccades')
 print("\nComputing extra event properties...")
 settings.dataset.compute_event_properties(['location', 'amplitude', 'peak_velocity', 'dispersion', 'disposition'])
 
-#%% Filter data
+#%% Blink and spatial filtering
 print("\nFiltering events (blinks and spatial bounds)...")
 prep.filter_events_blink_spatial(
     dataset=settings.dataset, raw_data_dir=settings.RAW_DATA_DIR,
@@ -58,6 +60,7 @@ prep.filter_events_blink_spatial(
     image_size_deg=settings.IMAGE_SIZE_DEG,
     filter_palette=settings.FILTER_PALETTE)
 
+#%% Assign trial metadata 
 print("\nAssigning trial metadata and image phases to events...")
 prep.assign_trial_metadata_and_phases(
     dataset=settings.dataset, raw_data_dir=settings.RAW_DATA_DIR,
@@ -69,6 +72,7 @@ prep.assign_trial_metadata_and_phases(
     data_quality_folder=settings.data_quality_folder,
     phase_palette=settings.PHASE_PALETTE)
 
+#%% Behavioural filtering
 print("\nApplying final behavioral filtering...")
 prep.apply_behavioral_filters_and_save(
     dataset=settings.dataset,
@@ -81,7 +85,10 @@ prep.apply_behavioral_filters_and_save(
 print("\nExporting fixations for NSS analysis...")
 export_nss_fixations(
     input_dir=settings.EVENTS_CLEANED_DIR,
-    output_file="data/NSS_all_fixations_clean.parquet")
+    output_file="data/NSS_all_fixations_clean.parquet",
+    blend_trials=BLEND_TRIALS 
+)
+run_within_phase_nss()
+run_cross_phase_nss()
 
-print("\nRunning NSS analysis...")
-run_nss_analysis()
+# %%
