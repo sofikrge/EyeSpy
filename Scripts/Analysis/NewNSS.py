@@ -98,11 +98,12 @@ def load_fixations(path: Path = FIX_FILE) -> pd.DataFrame:
 # ── COORDINATE HELPERS ────────────────────────────────────────────────────────
 
 def round_half_away_from_zero(x: np.ndarray) -> np.ndarray:
+    """Round to nearest integer, with halves rounded away from zero -> match Shaked's matlab code"""
     x = np.asarray(x, dtype=float)
     return (np.sign(x) * np.floor(np.abs(x) + 0.5)).astype(int)
 
-
 def _deg_to_image_pixels(x_deg, y_deg, ppd, *, width=IMAGE_WIDTH, height=IMAGE_HEIGHT):
+    """Convert centered visual degrees to 1-based pixel coordinates in the image."""
     w = round_half_away_from_zero((width  / 2.0) + x_deg * ppd).astype(int)
     h = round_half_away_from_zero((height / 2.0) + y_deg * ppd).astype(int)
     return h, w   # (row, col) in 1-based
@@ -111,6 +112,7 @@ def _deg_to_image_pixels(x_deg, y_deg, ppd, *, width=IMAGE_WIDTH, height=IMAGE_H
 # ── CACHE META ────────────────────────────────────────────────────────────────
 
 def _meta_block(ppd, image_h, image_w, group_cols, *, tag, extra=None):
+    """Build the metadata dict to accompany cached FixMaps and NSS results."""
     base = {
         "pixels_per_vdegree": float(ppd),
         "sigma_px":           float(ppd) / 2.0,
