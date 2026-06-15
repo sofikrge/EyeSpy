@@ -35,7 +35,7 @@ mpl.rcParams.update({
 # Set to True  → blend all fixations for participant × image (original behaviour)
 # Set to False → keep each trial separate (recommended when images repeat)
 # Must match the value used in NSSExporter.py
-BLEND_TRIALS = False
+BLEND_TRIALS = True
 
 FIX_FILE    = Path("data/NSS_all_fixations_clean.parquet")
 OUTPUT_DIR  = Path("analysesresults/NSS")
@@ -44,7 +44,7 @@ FIGURES_DIR = Path("Figures/nss_analyses")
 IMAGE_HEIGHT = 600
 IMAGE_WIDTH  = 800
 IMAGE_W_DEG  = 9.99
-MASK_PPD     = 48.5548  
+MASK_PPD     = 80.08
 
 DEBUG = True
 
