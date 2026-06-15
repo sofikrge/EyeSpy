@@ -1,5 +1,4 @@
-# old
-# NSSExporter.py
+# OldNSSExporter.py
 
 """
 Processes cleaned eye-tracking fixation data from multiple participant CSV files
@@ -113,13 +112,9 @@ export_df = (
           .alias("image_type")
     ])
     .select([
-        "ImageName", 
-        "session", 
-        "image_type", 
-        "participant", 
-        "x_deg_centered", 
-        "y_deg",
-        "condition"
+        "ImageName", "session", "image_type", "participant", 
+        "x_deg_centered", "y_deg", "condition", "trial_number", 
+        "awareness"
     ])
     .drop_nulls(subset=["image_type"])
 )

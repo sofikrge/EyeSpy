@@ -1,23 +1,24 @@
-import polars as pl
-from polars.testing import assert_frame_equal
+import pandas as pd
+from pathlib import Path
 
-#%% Check if changes made to preprocessing steps have altered the final outputs by comparing key CSV files before and after edits. This serves as a regression test to ensure that the preprocessing pipeline still produces the same results after modifications.
-def run_regression_checks():
-    # 1. Check all_events_cleaned.csv
-    print("Checking all_events_cleaned.csv...")
-    df_old_cleaned = pl.read_csv("data/OLD events_cleaned/all_events_cleaned.csv")
-    df_new_cleaned = pl.read_csv("data/events_cleaned/all_events_cleaned.csv")
-    
-    assert_frame_equal(df_old_cleaned, df_new_cleaned)
-    print("✅ Cleaned events DataFrames are 100% identical!\n")
+fixations = pd.read_parquet("data/NSS_all_fixations_clean.parquet")
 
-    # 2. Check blink_spatial_filtering.csv
-    print("Checking blink_spatial_filtering.csv...")
-    df_old_qc = pl.read_csv("OLD DataQualityChecks/blink_spatial_filtering.csv")
-    df_new_qc = pl.read_csv("DataQualityChecks/blink_spatial_filtering.csv")
-    
-    assert_frame_equal(df_old_qc, df_new_qc)
-    print("✅ Blink spatial filtering QC DataFrames are 100% identical!\n")
+mooney = fixations[
+    (fixations["image_type"] == "mooney_post_intact") &
+    (fixations["awareness"] == "conscious_unaware")
+]
 
-if __name__ == "__main__":
-    run_regression_checks()
+counts = (
+    mooney.groupby("ImageName")["participant"]
+    .nunique()
+    .reset_index(name="n_participants")
+    .sort_values("n_participants", ascending=False)
+)
+
+print(f"Total images with any conscious_unaware fixations: {len(counts)}")
+print(f"Images with >= 2 participants: {(counts['n_participants'] >= 2).sum()}")
+print(f"Images with exactly 1 participant: {(counts['n_participants'] == 1).sum()}")
+print(f"\nDistribution of participant counts:")
+print(counts["n_participants"].value_counts().sort_index())
+print(f"\nTop 10 images by participant count:")
+print(counts.head(10))

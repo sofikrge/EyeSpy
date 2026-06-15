@@ -1,5 +1,4 @@
-# old
-# NSSAnalyses.py
+# OldNSS.py
 
 """
 NSS (Normalized Scanpath Saliency) Analysis Module for Eye-Gaze Data
@@ -56,7 +55,7 @@ PALETTE = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
 
 IMAGE_W_DEG = 9.99
 IMAGE_H_DEG = 7.50
-MASK_PPD = 80.08  # 80.08 pixels/degree for masks
+MASK_PPD = 48.55  
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
@@ -616,136 +615,140 @@ def calculate_NSS_crossphase(
             continue
 
         # Prepare Mooney subject fixation coordinates (ordered like subjects)
-        df_group = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
+        df_group_all = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
+        awareness_groups = df_group_all.groupby("awareness")
 
-        # --- SURGICAL ADDITION: Get Participant IDs to match the sorted coords ---
-        # We must sort to match the order used in _coords_in_fixmaps_order
-        participant_ids = sorted(df_group["participant"].astype(str).unique())
+        for awareness_val, df_group in awareness_groups:
+            participant_ids = sorted(df_group["participant"].astype(str).unique())
+            coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+            n_subj = len(coords_list)
 
-        coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
-        n_subj = len(coords_list)
-
-        if n_subj < int(min_subj_per_image_cross):
-            Results["image"].append({
-                "img": img, "condition": cond, "image_type": "mooney", # Standardize output type
-                "subject": [],
-                "NSS_intact_img": float("nan"),
-                "NSS_scrambled_img": float("nan"),
-                "NSS_diff_img": float("nan"),
-            })
-            Results["meanNSS_intact_per_image"].append(float("nan"))
-            Results["meanNSS_scrambled_per_image"].append(float("nan"))
-            Results["meanNSS_diff_per_image"].append(float("nan"))
-            per_image_records.append({
-                "img": img, "condition": cond,
-                "NSS_intact_img": float("nan"),
-                "NSS_scrambled_img": float("nan"),
-                "NSS_diff_img": float("nan"),
-                "n_subjects": int(n_subj),
-            })
-            continue
-        
-        # STRICT SESSION MATCHING: Use 'cond' (current session) to look up the reference
-        fm_intact = fm_index.get((img, cond, "disamb_intact"))
-        fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
-        
-        # Set helper vars so the debug prints below (lines 640+) don't crash
-        intact_session = cond if fm_intact else None
-        scrambled_session = cond if fm_scrambled else None
-
-        ref_maps = {
-            "intact":    fm_intact["fixMapPerIm"]    if fm_intact    and fm_intact.get("fixMapPerIm", None)    is not None and len(np.shape(fm_intact["fixMapPerIm"])) == 2 else None,
-            "scrambled": fm_scrambled["fixMapPerIm"] if fm_scrambled and fm_scrambled.get("fixMapPerIm", None) is not None and len(np.shape(fm_scrambled["fixMapPerIm"])) == 2 else None,
-        }
-
-        # Z-normalize references (population std); if std==0 or non-finite => zmap=None (treated as NaN NSS)
-        zrefs = {}
-        for k, ref in ref_maps.items():
-            if ref is None:
-                zrefs[k] = None
-            else:
-                zref, mu, sd = _z_normalize(np.asarray(ref, dtype=float))
-                zrefs[k] = zref  # None if degenerate
-
-        # Optional but helpful diagnostics
-        if DEBUG:
-            if ref_maps["intact"] is None:
-                print(f"[cross] ❌ Missing intact reference for img={img}")
-            elif zrefs["intact"] is None:
-                print(f"[cross] ⚠️  Degenerate intact map (zero std) for img={img}")
+            if n_subj < int(min_subj_per_image_cross):
+                Results["image"].append({
+                    "img": img, "condition": cond, "image_type": "mooney", # Standardize output type
+                    "subject": [],
+                    "NSS_intact_img": float("nan"),
+                    "NSS_scrambled_img": float("nan"),
+                    "NSS_diff_img": float("nan"),
+                    "awareness": awareness_val,
+                })
+                Results["meanNSS_intact_per_image"].append(float("nan"))
+                Results["meanNSS_scrambled_per_image"].append(float("nan"))
+                Results["meanNSS_diff_per_image"].append(float("nan"))
+                per_image_records.append({
+                    "img": img, "condition": cond,
+                    "NSS_intact_img": float("nan"),
+                    "NSS_scrambled_img": float("nan"),
+                    "NSS_diff_img": float("nan"),
+                    "n_subjects": int(n_subj),
+                    "awareness": awareness_val,
+                })
+                continue
             
-            if ref_maps["scrambled"] is None:
-                print(f"[cross] ❌ Missing scrambled reference for img={img}")
-            elif zrefs["scrambled"] is None:
-                print(f"[cross] ⚠️  Degenerate scrambled map (zero std) for img={img}")
+            # STRICT SESSION MATCHING: Use 'cond' (current session) to look up the reference
+            fm_intact = fm_index.get((img, cond, "disamb_intact"))
+            fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
             
-            # NEW: Show which sessions provided references
-            if fm_intact or fm_scrambled:
-                status = []
-                if fm_intact:
-                    match = "✓ same" if intact_session == cond else "↔ cross"
-                    status.append(f"intact from {intact_session} {match}")
-                if fm_scrambled:
-                    match = "✓ same" if scrambled_session == cond else "↔ cross"
-                    status.append(f"scrambled from {scrambled_session} {match}")
+            # Set helper vars so the debug prints below (lines 640+) don't crash
+            intact_session = cond if fm_intact else None
+            scrambled_session = cond if fm_scrambled else None
+
+            ref_maps = {
+                "intact":    fm_intact["fixMapPerIm"]    if fm_intact    and fm_intact.get("fixMapPerIm", None)    is not None and len(np.shape(fm_intact["fixMapPerIm"])) == 2 else None,
+                "scrambled": fm_scrambled["fixMapPerIm"] if fm_scrambled and fm_scrambled.get("fixMapPerIm", None) is not None and len(np.shape(fm_scrambled["fixMapPerIm"])) == 2 else None,
+            }
+
+            # Z-normalize references (population std); if std==0 or non-finite => zmap=None (treated as NaN NSS)
+            zrefs = {}
+            for k, ref in ref_maps.items():
+                if ref is None:
+                    zrefs[k] = None
+                else:
+                    zref, mu, sd = _z_normalize(np.asarray(ref, dtype=float))
+                    zrefs[k] = zref  # None if degenerate
+
+            # Optional but helpful diagnostics
+            if DEBUG:
+                if ref_maps["intact"] is None:
+                    print(f"[cross] ❌ Missing intact reference for img={img}")
+                elif zrefs["intact"] is None:
+                    print(f"[cross] ⚠️  Degenerate intact map (zero std) for img={img}")
                 
-                # print(f"[cross-session] img={img}, mooney_sess={cond}, {', '.join(status)}")
+                if ref_maps["scrambled"] is None:
+                    print(f"[cross] ❌ Missing scrambled reference for img={img}")
+                elif zrefs["scrambled"] is None:
+                    print(f"[cross] ⚠️  Degenerate scrambled map (zero std) for img={img}")
+                
+                # NEW: Show which sessions provided references
+                if fm_intact or fm_scrambled:
+                    status = []
+                    if fm_intact:
+                        match = "✓ same" if intact_session == cond else "↔ cross"
+                        status.append(f"intact from {intact_session} {match}")
+                    if fm_scrambled:
+                        match = "✓ same" if scrambled_session == cond else "↔ cross"
+                        status.append(f"scrambled from {scrambled_session} {match}")
+                    
+                    # print(f"[cross-session] img={img}, mooney_sess={cond}, {', '.join(status)}")
 
 
-        # Per-subject NSS for each reference
-        subj_out = []
-        subj_scores_intact = []
-        subj_scores_scrambled = []
+            # Per-subject NSS for each reference
+            subj_out = []
+            subj_scores_intact = []
+            subj_scores_scrambled = []
 
-        for j in range(n_subj):
-            coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
+            for j in range(n_subj):
+                coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
 
-            nss_intact = _nss_for_subject(zrefs["intact"], coords_j, dy_off, dx_off)
-            nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
-            nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
+                nss_intact = _nss_for_subject(zrefs["intact"], coords_j, dy_off, dx_off)
+                nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
+                nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
 
-            mooney_subjects = fm_mooney.get("subject", [])
-            subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
+                mooney_subjects = fm_mooney.get("subject", [])
+                subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
 
-            subj_out.append({
-                "subjNum": subjnum, 
-                "ParticipantID": participant_ids[j],  # <--- ADD THIS
-                "NSS_intact": nss_intact, 
-                "NSS_scrambled": nss_scram, 
-                "NSS_diff": nss_diff
+                subj_out.append({
+                    "subjNum": subjnum, 
+                    "ParticipantID": participant_ids[j],  # <--- ADD THIS
+                    "NSS_intact": nss_intact, 
+                    "NSS_scrambled": nss_scram, 
+                    "NSS_diff": nss_diff,
+                    "awareness": awareness_val,
+                })
+
+                subj_scores_intact.append(nss_intact)
+                subj_scores_scrambled.append(nss_scram)
+
+            # Per-image aggregation (policy-controlled)
+            img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
+            img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
+            img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
+
+            # Store detailed record and flat record
+            Results["image"].append({
+                "img": img,
+                "condition": cond,
+                "image_type": "mooney", # Standardize output type for cross-phase results
+                "subject": subj_out,
+                "NSS_intact_img": img_nss_intact,
+                "NSS_scrambled_img": img_nss_scrambled,
+                "NSS_diff_img": img_nss_diff,
+                "awareness": awareness_val,
             })
 
-            subj_scores_intact.append(nss_intact)
-            subj_scores_scrambled.append(nss_scram)
+            Results["meanNSS_intact_per_image"].append(img_nss_intact)
+            Results["meanNSS_scrambled_per_image"].append(img_nss_scrambled)
+            Results["meanNSS_diff_per_image"].append(img_nss_diff)
 
-        # Per-image aggregation (policy-controlled)
-        img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
-        img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
-        img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
-
-        # Store detailed record and flat record
-        Results["image"].append({
-            "img": img,
-            "condition": cond,
-            "image_type": "mooney", # Standardize output type for cross-phase results
-            "subject": subj_out,
-            "NSS_intact_img": img_nss_intact,
-            "NSS_scrambled_img": img_nss_scrambled,
-            "NSS_diff_img": img_nss_diff,
-        })
-
-        Results["meanNSS_intact_per_image"].append(img_nss_intact)
-        Results["meanNSS_scrambled_per_image"].append(img_nss_scrambled)
-        Results["meanNSS_diff_per_image"].append(img_nss_diff)
-
-        per_image_records.append({
-            "img": img,
-            "condition": cond,
-            "NSS_intact_img": img_nss_intact,
-            "NSS_scrambled_img": img_nss_scrambled,
-            "NSS_diff_img": img_nss_diff,
-            "n_subjects": int(n_subj),
-        })
+            per_image_records.append({
+                "img": img,
+                "condition": cond,
+                "NSS_intact_img": img_nss_intact,
+                "NSS_scrambled_img": img_nss_scrambled,
+                "NSS_diff_img": img_nss_diff,
+                "n_subjects": int(n_subj),
+                "awareness": awareness_val,
+            })
 
     # Condition-wise summaries
     Results["summary_by_condition"] = _summarize_by_condition(per_image_records)
@@ -1131,7 +1134,8 @@ if __name__ == "__main__":
                     'Image': image_name,
                     'Session': session,
                     'NSS_Intact': subj['NSS_intact'],
-                    'NSS_Scrambled': subj['NSS_scrambled']
+                    'NSS_Scrambled': subj['NSS_scrambled'],
+                    'Awareness': img_data['awareness']
                 })
 
     # 2. Convert to DataFrame and Aggregate
@@ -1144,7 +1148,7 @@ if __name__ == "__main__":
     
     # Let's melt it fully for you so it is perfectly ready for LMM
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session'], 
+        id_vars=['Participant', 'Image', 'Session', 'Awareness'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
@@ -1198,14 +1202,14 @@ if __name__ == "__main__":
     # --- END DEBUG PRINTS ---
 
     # Group by Participant & Session to get their average performance
-    df_agg = df_long.groupby(['Participant', 'Session'], as_index=False).mean(numeric_only=True)
+    df_agg = df_long.groupby(['Participant', 'Session', 'Awareness'], as_index=False).mean(numeric_only=True)
 
     # 3. Pivot to Wide Format (Rows=Subjects, Cols=Conditions)
-    df_wide = df_agg.pivot(index='Participant', columns='Session', values=['NSS_Intact', 'NSS_Scrambled'])
+    df_wide = df_agg.pivot(index='Participant', columns=['Session', 'Awareness'], values=['NSS_Intact', 'NSS_Scrambled'])
     
     # 4. Flatten the Multi-Level Columns
     # This turns ('NSS_Intact', 'C') into 'NSS_Intact_C'
-    df_wide.columns = [f"{col[0]}_{col[1]}" for col in df_wide.columns]
+    df_wide.columns = [f"{col[0]}_{col[1]}_{col[2]}" for col in df_wide.columns]
     df_wide = df_wide.reset_index()
 
     # 5. Save
@@ -1236,74 +1240,6 @@ if __name__ == "__main__":
             pass
 
     # ==========================================
-    # === PYTHON VERIFICATION (2x2 ANOVA) ===
-    # ==========================================
-    print("\n🧮 Running Python Verification ANOVA (statsmodels)...")
-    try:
-        
-        
-        # 1. Prepare Data: Melt to Long Format
-        df_anova = df_agg.melt(
-            id_vars=['Participant', 'Session'],
-            value_vars=['NSS_Intact', 'NSS_Scrambled'],
-            var_name='ReferenceMap',
-            value_name='NSS'
-        )
-        # Clean names (NSS_Intact -> Intact)
-        df_anova['ReferenceMap'] = df_anova['ReferenceMap'].str.replace('NSS_', '')
-
-        # 2. DIAGNOSIS: Find the "Troublemakers"
-        # We expect exactly 4 rows per participant: (C, Intact), (C, Scrambled), (U, Intact), (U, Scrambled)
-        counts = df_anova.groupby('Participant').size()
-        expected_rows = 4
-        
-        incomplete_subjects = counts[counts != expected_rows].index.tolist()
-        complete_subjects = counts[counts == expected_rows].index.tolist()
-
-        if incomplete_subjects:
-            print(f"\n⚠️  FOUND DATA IMBALANCE!")
-            print(f"   The following {len(incomplete_subjects)} participants are missing conditions and will be EXCLUDED from Python ANOVA:")
-            
-            # Print detailed reason for each excluded subject
-            for subj in incomplete_subjects:
-                subj_data = df_anova[df_anova['Participant'] == subj]
-                found_conds = set(zip(subj_data['Session'], subj_data['ReferenceMap']))
-                all_conds = {('C', 'Intact'), ('C', 'Scrambled'), ('U', 'Intact'), ('U', 'Scrambled')}
-                missing = all_conds - found_conds
-                print(f"   ❌ Participant {subj}: Missing {missing}")
-
-            # 3. FILTER: Keep only complete subjects
-            print(f"\n   -> Proceeding with the {len(complete_subjects)} complete participants...")
-            df_anova_clean = df_anova[df_anova['Participant'].isin(complete_subjects)]
-        else:
-            print("   ✅ Data is perfectly balanced (all subjects have all conditions).")
-            df_anova_clean = df_anova
-
-        # 4. Run 2x2 Repeated Measures ANOVA on CLEAN data
-        if len(df_anova_clean) > 0:
-            aov = AnovaRM(
-                data=df_anova_clean, 
-                depvar='NSS', 
-                subject='Participant', 
-                within=['Session', 'ReferenceMap']
-            )
-            res = aov.fit()
-
-            print("\n" + "="*40)
-            print("PYTHON ANOVA RESULTS (Cleaned Data)")
-            print("="*40)
-            print(res)
-            print("----------------------------------------")
-            print("Compare these F-values with Jamovi (after filtering incomplete subjects there too).")
-        else:
-            print("❌ No valid data left to run ANOVA.")
-
-    except ImportError:
-        print("⚠️ 'statsmodels' library not found. Run 'pip install statsmodels' to verify.")
-    except Exception as e:
-        print(f"⚠️ ANOVA Verification Failed: {e}")
-
-    # ==========================================
     # === VIOLIN PLOT VISUALIZATION ===
     # ==========================================
     print("\n🎻 Generating Split Violin Plot...")
@@ -1313,7 +1249,7 @@ if __name__ == "__main__":
         # 1. Prepare Data for Plotting
         # We reuse 'df_agg' (the participant-level averages) created in the Jamovi step
         plot_df = df_agg.melt(
-            id_vars=['Participant', 'Session'],
+            id_vars=['Participant', 'Session', 'Awareness'],
             value_vars=['NSS_Intact', 'NSS_Scrambled'],
             var_name='ReferenceMap',
             value_name='NSS'
