@@ -1,3 +1,5 @@
+
+# new
 # Scripts/Analysis/NSSUtils.py
 
 """
@@ -42,7 +44,7 @@ FIGURES_DIR = Path("Figures/nss_analyses")
 IMAGE_HEIGHT = 600
 IMAGE_WIDTH  = 800
 IMAGE_W_DEG  = 9.99
-MASK_PPD     = IMAGE_WIDTH / IMAGE_W_DEG   # 80.08 px/deg
+MASK_PPD     = 48.5548  
 
 DEBUG = True
 
