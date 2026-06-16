@@ -3,10 +3,10 @@
 import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
-from Scripts.Analysis.NewNSSExporter import export_nss_fixations
-from Scripts.Analysis.NSSWithinPhase import run_within_phase_nss
-from Scripts.Analysis.NSSCrossPhase import run_cross_phase_nss
-from Scripts.Analysis.NSSUtils import BLEND_TRIALS
+from Archive.NewNSSExporter import export_nss_fixations
+from Archive.NSSWithinPhase import run_within_phase_nss
+from Archive.NSSCrossPhase import run_cross_phase_nss
+from Archive.NSSUtils import BLEND_TRIALS
 
 #%% How to use
 """

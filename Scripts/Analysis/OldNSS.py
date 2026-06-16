@@ -285,8 +285,8 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
         return coords
 
     # stable + robust ordering
-    dfg = df_group.assign(participant_str=df_group["participant"].astype(str)).sort_values("participant_str")
-    g = dfg.groupby("participant_str", dropna=False)
+    dfg = df_group.assign(participant_str=df_group["participant"].astype(str)).sort_values(["participant_str", "trial_number"])
+    g = dfg.groupby(["participant_str", "trial_number"], dropna=False)
 
     for _, df_subj in g:
         xdeg = pd.to_numeric(df_subj["x_deg_centered"], errors="coerce").to_numpy()
@@ -621,7 +621,10 @@ def calculate_NSS_crossphase(
         awareness_groups = df_group_all.groupby("awareness")
 
         for awareness_val, df_group in awareness_groups:
-            participant_ids = sorted(df_group["participant"].astype(str).unique())
+            participant_ids = sorted(
+                (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
+                key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
+            )
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
             n_subj = len(coords_list)
 
@@ -1132,12 +1135,13 @@ if __name__ == "__main__":
         for subj in img_data['subject']:
             if 'ParticipantID' in subj: # Only works if you did Step 1
                 flat_data.append({
-                    'Participant': subj['ParticipantID'],
+                    'Participant': subj['ParticipantID'].split('_t')[0],
                     'Image': image_name,
                     'Session': session,
                     'NSS_Intact': subj['NSS_intact'],
                     'NSS_Scrambled': subj['NSS_scrambled'],
-                    'Awareness': img_data['awareness']
+                    'Awareness': img_data['awareness'],
+                    'Trial': subj['ParticipantID'].split('_t')[1],
                 })
 
     # 2. Convert to DataFrame and Aggregate
@@ -1150,7 +1154,7 @@ if __name__ == "__main__":
     
     # Let's melt it fully for you so it is perfectly ready for LMM
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'

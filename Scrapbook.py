@@ -1,24 +1,21 @@
-import pandas as pd
-from pathlib import Path
+import polars as pl
 
-fixations = pd.read_parquet("data/NSS_all_fixations_clean.parquet")
+# Re-run a stripped down version of the diagonal_relaxed merge
+import os, re
+INPUT_DIR = "data/events_cleaned"
+FILENAME_PATTERN = re.compile(r"s_([A-Za-z]+)_(\d+)\.csv")
+dfs = []
+files = sorted([f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")])
+for filename in files:
+    match = FILENAME_PATTERN.match(filename)
+    if not match:
+        continue
+    df = pl.read_csv(os.path.join(INPUT_DIR, filename), infer_schema_length=10000)
+    dfs.append(df)
 
-mooney = fixations[
-    (fixations["image_type"] == "mooney_post_intact") &
-    (fixations["awareness"] == "conscious_unaware")
-]
+full_df = pl.concat(dfs, how="diagonal_relaxed")
+fixations_only = full_df.filter(pl.col("name") == "fixation")
 
-counts = (
-    mooney.groupby("ImageName")["participant"]
-    .nunique()
-    .reset_index(name="n_participants")
-    .sort_values("n_participants", ascending=False)
-)
-
-print(f"Total images with any conscious_unaware fixations: {len(counts)}")
-print(f"Images with >= 2 participants: {(counts['n_participants'] >= 2).sum()}")
-print(f"Images with exactly 1 participant: {(counts['n_participants'] == 1).sum()}")
-print(f"\nDistribution of participant counts:")
-print(counts["n_participants"].value_counts().sort_index())
-print(f"\nTop 10 images by participant count:")
-print(counts.head(10))
+print(f"Total fixation rows before image_type/null filtering: {len(fixations_only)}")
+print(f"Nulls in 'phase': {fixations_only['phase'].is_null().sum()}")
+print(f"Nulls in 'condition': {fixations_only['condition'].is_null().sum()}")
