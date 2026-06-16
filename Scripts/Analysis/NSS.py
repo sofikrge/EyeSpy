@@ -57,7 +57,7 @@ PALETTE = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
 
 IMAGE_W_DEG = 9.99
 IMAGE_H_DEG = 7.50
-MASK_PPD = 48.55  
+MASK_PPD = 48.55  # according to screen dimensions
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
