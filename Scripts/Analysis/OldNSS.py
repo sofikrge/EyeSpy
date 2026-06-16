@@ -1148,6 +1148,13 @@ if __name__ == "__main__":
     # We average across all images for each person-session combo
     df_long = pd.DataFrame(flat_data)
 
+
+    # --- NEW SURGICAL ADDITION ---
+    df_long['Trial'] = pd.to_numeric(df_long['Trial'])
+    df_long['Experiment_Half'] = df_long.groupby(['Participant', 'Session'])['Trial'].transform(
+        lambda x: np.where(x <= x.median(), 'First_Half', 'Second_Half')
+    )
+    
     # --- NEW: SAVE LONG FORMAT HERE ---
     # Note: Cross-phase data is currently "wide" regarding Intact/Scrambled columns. 
     # For LMM, you might want these melted into a single "NSS" column and a "Reference" column.
