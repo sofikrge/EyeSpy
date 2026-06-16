@@ -1154,14 +1154,14 @@ if __name__ == "__main__":
     df_long['Experiment_Half'] = df_long.groupby(['Participant', 'Session'])['Trial'].transform(
         lambda x: np.where(x <= x.median(), 'First_Half', 'Second_Half')
     )
-    
+
     # --- NEW: SAVE LONG FORMAT HERE ---
     # Note: Cross-phase data is currently "wide" regarding Intact/Scrambled columns. 
     # For LMM, you might want these melted into a single "NSS" column and a "Reference" column.
     
     # Let's melt it fully for you so it is perfectly ready for LMM
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
