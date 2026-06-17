@@ -3,10 +3,6 @@
 import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
-from Archive.NewNSSExporter import export_nss_fixations
-from Archive.NSSWithinPhase import run_within_phase_nss
-from Archive.NSSCrossPhase import run_cross_phase_nss
-from Archive.NSSUtils import BLEND_TRIALS
 
 #%% How to use
 """
@@ -80,15 +76,5 @@ prep.apply_behavioral_filters_and_save(
     exclude_subjects=settings.EXCLUDE_SUBJECTS,
     exclude_sessions=settings.EXCLUDE_SESSIONS,
     exclude_blocks=settings.EXCLUDE_BLOCKS)
-
-#%% NSS Analysis
-print("\nExporting fixations for NSS analysis...")
-export_nss_fixations(
-    input_dir=settings.EVENTS_CLEANED_DIR,
-    output_file="data/NSS_all_fixations_clean.parquet",
-    blend_trials=BLEND_TRIALS 
-)
-run_within_phase_nss()
-run_cross_phase_nss()
 
 # %%

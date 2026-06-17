@@ -130,6 +130,7 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
     for (img_name, cond, img_type), df_img in (
         df.sort_values(group_cols + ["participant"]).groupby(group_cols, dropna=False)
     ):
+        if img_type == "mooney_post_scrambled": continue  # skip scrambled Mooney as we won't analyze it directly
         entry = {"img": img_name, "condition": cond, "image_type": img_type}
 
         subj_maps = []
@@ -442,7 +443,7 @@ def summarise_nss_to_parquet(NSSResults: dict, out_path: Path) -> pd.DataFrame:
         img_mean = img_means[i] if i < len(img_means) else np.nan
         cond = rec.get("condition")
         img_type = rec.get("image_type")
-        n_subj = len(rec.get("subject", []))
+        n_subj= len(rec.get("subject", []))
         rows.append({
             "condition": cond,
             "image_type": img_type,
@@ -599,6 +600,11 @@ def calculate_NSS_crossphase(
     # Fast lookup for reference maps
     fm_index = _index_fixmaps(FixMaps)
 
+    # Count how many Mooney groups exist for sanity check
+    n_mi = sum(1 for fm in FixMaps if fm["image_type"]=="mooney_post_intact")
+    n_ms = sum(1 for fm in FixMaps if fm["image_type"]=="mooney_post_scrambled")
+    print(f"[cross] Mooney groups found: post_intact={n_mi}, post_scrambled={n_ms}")
+
     # Collect per-image results (for summaries) and detailed per-image structures
     per_image_records = []
     Results = {
@@ -619,16 +625,29 @@ def calculate_NSS_crossphase(
         # Prepare Mooney subject fixation coordinates (ordered like subjects)
         df_group_all = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
         awareness_groups = df_group_all.groupby("awareness")
+        print(f"[cross]   total fixations for img={img} cond={cond}: {len(df_group_all)}, unique participants: {df_group_all['participant'].nunique()}, unique trials: {df_group_all['trial_number'].nunique()}")
+
+        if DEBUG:
+            print(f"[cross] img={img} cond={cond} | awareness groups: {sorted(df_group_all['awareness'].unique())}")
 
         for awareness_val, df_group in awareness_groups:
+            expected_prefix = "conscious" if cond == "C" else "unconscious"
+            if not str(awareness_val).startswith(expected_prefix):
+                print(f"[cross] ⚠️ MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
             participant_ids = sorted(
                 (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
                 key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
             )
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
-            n_subj = len(coords_list)
+            print(f"[cross]   coords_list length (n trial-participant units): {len(coords_list)}, non-empty: {sum(1 for h,w in coords_list if len(h)>0)}")
+            n_subj= len(coords_list)
 
-            if n_subj < int(min_subj_per_image_cross):
+            # Debug print for awareness group
+            n_fix_raw = len(df_group)
+            n_fix_kept = sum(len(h) for h, w in coords_list)
+            print(f"[cross]   awareness={awareness_val}: n_subj={n_subj}, fixations raw={n_fix_raw}, kept_in_bounds={n_fix_kept}")
+
+            if n_subj< int(min_subj_per_image_cross):
                 Results["image"].append({
                     "img": img, "condition": cond, "image_type": "mooney", # Standardize output type
                     "subject": [],
@@ -649,7 +668,7 @@ def calculate_NSS_crossphase(
                     "awareness": awareness_val,
                 })
                 continue
-            
+
             # STRICT SESSION MATCHING: Use 'cond' (current session) to look up the reference
             fm_intact = fm_index.get((img, cond, "disamb_intact"))
             fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
@@ -674,28 +693,13 @@ def calculate_NSS_crossphase(
 
             # Optional but helpful diagnostics
             if DEBUG:
-                if ref_maps["intact"] is None:
-                    print(f"[cross] ❌ Missing intact reference for img={img}")
-                elif zrefs["intact"] is None:
-                    print(f"[cross] ⚠️  Degenerate intact map (zero std) for img={img}")
-                
-                if ref_maps["scrambled"] is None:
-                    print(f"[cross] ❌ Missing scrambled reference for img={img}")
-                elif zrefs["scrambled"] is None:
-                    print(f"[cross] ⚠️  Degenerate scrambled map (zero std) for img={img}")
-                
-                # NEW: Show which sessions provided references
-                if fm_intact or fm_scrambled:
-                    status = []
-                    if fm_intact:
-                        match = "✓ same" if intact_session == cond else "↔ cross"
-                        status.append(f"intact from {intact_session} {match}")
-                    if fm_scrambled:
-                        match = "✓ same" if scrambled_session == cond else "↔ cross"
-                        status.append(f"scrambled from {scrambled_session} {match}")
-                    
-                    # print(f"[cross-session] img={img}, mooney_sess={cond}, {', '.join(status)}")
-
+                for k in ['intact', 'scrambled']:
+                    if ref_maps[k] is None:
+                        print(f"[cross] ❌ ref '{k}' missing for img={img} cond={cond}")
+                    elif zrefs[k] is None:
+                        print(f"[cross] ⚠️  ref '{k}' degenerate (zero std) for img={img} cond={cond}")
+                    else:
+                        print(f"[cross] ✓ ref '{k}' ready: mean={ref_maps[k].mean():.4f}, std={ref_maps[k].std():.4f}, nonzero_px={np.count_nonzero(ref_maps[k])}")
 
             # Per-subject NSS for each reference
             subj_out = []
@@ -722,12 +726,17 @@ def calculate_NSS_crossphase(
                 })
 
                 subj_scores_intact.append(nss_intact)
+                if DEBUG:
+                    print(f"[cross]     trial_unit j={j} pid={participant_ids[j]}: NSS_intact={nss_intact:.4f}, NSS_scrambled={nss_scram:.4f}")
                 subj_scores_scrambled.append(nss_scram)
 
             # Per-image aggregation (policy-controlled)
             img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
             img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
             img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
+
+            if DEBUG:
+                print(f"[cross]   img_agg img={img} cond={cond} awareness={awareness_val}: intact={img_nss_intact:.4f}, scrambled={img_nss_scrambled:.4f}, diff={img_nss_diff:.4f}")
 
             # Store detailed record and flat record
             Results["image"].append({
@@ -757,6 +766,19 @@ def calculate_NSS_crossphase(
 
     # Condition-wise summaries
     Results["summary_by_condition"] = _summarize_by_condition(per_image_records)
+
+    n_total = len(Results["image"])
+    n_valid_i = sum(np.isfinite(r["NSS_intact_img"]) for r in Results["image"])
+    n_valid_s = sum(np.isfinite(r["NSS_scrambled_img"]) for r in Results["image"])
+    print(f"[cross] DONE: {n_total} (img,cond,awareness) groups → valid intact={n_valid_i}, valid scrambled={n_valid_s}")
+
+    if DEBUG:
+        from collections import Counter
+        tot = Counter(r["awareness"] for r in Results["image"])
+        vi  = Counter(r["awareness"] for r in Results["image"] if np.isfinite(r["NSS_intact_img"]))
+        vs  = Counter(r["awareness"] for r in Results["image"] if np.isfinite(r["NSS_scrambled_img"]))
+        for aw in tot:
+            print(f"[cross] awareness={aw}: total={tot[aw]}, valid_intact={vi.get(aw,0)}, valid_scrambled={vs.get(aw,0)}")
 
     return Results
 
@@ -891,6 +913,14 @@ if __name__ == "__main__":
 
     if DEBUG: 
         summarise_fixmaps(FixMaps)
+
+        if DEBUG:
+            from collections import Counter
+            thresh = max(MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS)
+            low_n = [fm for fm in FixMaps if len(fm.get("subject", [])) < thresh]
+            print(f"[FixMaps] {len(low_n)}/{len(FixMaps)} groups below n_subj={thresh}, by image_type:")
+            print(Counter(fm["image_type"] for fm in low_n))
+
         # Build a quick index of what's in FixMaps
         fm_keys = {(fm["img"], fm["condition"], fm["image_type"]) for fm in FixMaps}
         mooney_pairs = sorted({(fm["img"], fm["condition"]) for fm in FixMaps if fm["image_type"] == "mooney_post_intact"})
@@ -1115,7 +1145,7 @@ if __name__ == "__main__":
         within_csv_path = OUTPUT_DIR / "NSS_WithinPhase_ParticipantLevel_Wide.csv"
         df_w_wide.to_csv(within_csv_path, index=False)
         print(f"✅ Saved Within-Phase 2x3 Dataset to: {within_csv_path}")
-        print("   -> Columns should be (approx):")
+        print(f"   -> Actual columns: {df_w_wide.columns.tolist()}")
         print("      NSS_C_mooney, NSS_C_disamb_intact, NSS_C_disamb_not_intact")
         print("      NSS_U_mooney, NSS_U_disamb_intact, NSS_U_disamb_not_intact")
     else:
