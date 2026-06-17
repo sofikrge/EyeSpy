@@ -20,7 +20,8 @@ IMAGE_HEIGHT        = 600
 IMAGE_WIDTH         = 800
 DEBUG               = True
 
-MASK_PPD            = 48.55  
+MASK_PPD            = 48.55 
+SIGMA               = MASK_PPD / 2.0 # Pixels per visual degree / 2
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
@@ -34,24 +35,26 @@ DISPERSION_DDOF = 0   # 0 = population sd (spread of present data); set to 1 for
 #%% === LOAD & PREP ===
 
 def load_fixations(path: Path = FIX_FILE) -> pd.DataFrame:
+    """Load fixations from Parquet file."""
     if not path.exists():
         raise FileNotFoundError(f"Fixations file not found: {path}")
     df = pd.read_parquet(path)
-    if DEBUG:
-        print(f"Loaded {len(df):,} fixation rows from {path}")
     return df
 
 def _deg_to_image_pixels(x_deg, y_deg, ppd, *, width=IMAGE_WIDTH, height=IMAGE_HEIGHT):
+    """Convert visual degrees to image pixel coordinates."""
     w_1based = round_half_away_from_zero((width  / 2.0) + x_deg * ppd).astype(int)
-    h_1based = round_half_away_from_zero((height / 2.0) + y_deg * ppd).astype(int)  # ← FIXED: removed minus sign
+    h_1based = round_half_away_from_zero((height / 2.0) + y_deg * ppd).astype(int) 
     return h_1based, w_1based
 
 def round_half_away_from_zero(x):
+    """Round to nearest integer, with ties away from zero (like MATLAB's round)."""
     x = np.asarray(x, dtype=float)
     return (np.sign(x) * np.floor(np.abs(x) + 0.5)).astype(int)
 
 def _meta_block(ppd: float, image_h: int, image_w: int, group_cols: tuple[str, ...], *,
                 tag: str, extra: dict | None = None) -> dict:
+    """Generate metadata dictionary for cache use, to ensure cache is only used if metadata matches """
     base = {
         "pixels_per_vdegree": float(ppd),
         "sigma_px": float(ppd) / 2.0,
@@ -65,7 +68,7 @@ def _meta_block(ppd: float, image_h: int, image_w: int, group_cols: tuple[str, .
 
 #%% === FIXATION MAPS ===
 def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
-    """Per-subject hit map → average across subjects → Gaussian blur (MATLAB-equivalent)."""
+    """Per-subject hit map → average across subjects → Gaussian blur"""
     needed = {"ImageName", "session", "image_type", "participant", "x_deg_centered", "y_deg"}
     missing = needed - set(df.columns)
     if missing:
@@ -78,6 +81,8 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
     FixMaps = []
     
     group_cols = ["ImageName", "session", "image_type"]
+
+    # Splits dataframe into smaller chunks based on imagename, sesison, imagetype
     for (img_name, cond, img_type), df_img in (
         df.sort_values(group_cols + ["participant"]).groupby(group_cols, dropna=False)
     ):
@@ -87,6 +92,7 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
         subj_maps = []
         mapPerIm = None
 
+        # Build indiviudual maps for each participant
         for jj, (pid, df_subj) in enumerate(df_img.groupby("participant", dropna=False), start=1):
             subj_entry = {"subjNum": jj, "ParticipantID": str(pid)}
             mapPerImAndSubj = np.zeros(ImSize, dtype=np.uint32)
@@ -106,7 +112,6 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
                     counts = np.bincount(lin, minlength=H * W).reshape(ImSize)
                     mapPerImAndSubj += counts.astype(np.uint16, copy=False)
 
-            # 1) first accumulate into the running average buffer
             if mapPerIm is None:
                 mapPerIm = mapPerImAndSubj.astype(np.float32, copy=False)
             else:
@@ -118,7 +123,7 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
             del mapPerImAndSubj
             subj_maps.append(subj_entry)
 
-        # average across subjects (same as MATLAB's ./size(...,2))
+        # average across subjects -> later acts as ref map
         nsubj = max(len(subj_maps), 1)
         mapPerIm /= float(nsubj)
 
@@ -133,22 +138,17 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
 
 #%% === NSS like Shaked's Matlab ===
 def _disk_offsets(radius_px: float) -> tuple[np.ndarray, np.ndarray]:
+    """Creates circle mask to later identify which fix fall within radius"""
     r = int(np.ceil(float(radius_px)))   # ← ceil instead of floor
     y, x = np.mgrid[-r:r+1, -r:r+1]
     m = (x*x + y*y) <= (float(radius_px) ** 2)  # still exact inclusion test
     return y[m].astype(np.int32), x[m].astype(np.int32)
 
 def _disk_means_at_points(
-    zmap: np.ndarray,
-    rows_0b: np.ndarray,
-    cols_0b: np.ndarray,
-    dy: np.ndarray,
-    dx: np.ndarray,
-    chunk_size: int = 512
-) -> np.ndarray:
+    zmap: np.ndarray, rows_0b: np.ndarray, cols_0b: np.ndarray, dy: np.ndarray,
+    dx: np.ndarray, chunk_size: int = 512) -> np.ndarray:
     """
-    For each fixation (row_0b, col_0b), take the mean of zmap within the disk offsets (dy, dx).
-    Pixels leaving the image bounds are ignored.
+    Takes disk offset stencil and overlays it onto every fix to capture avg local saleincy score
     """
     H, W = zmap.shape
     K = rows_0b.size
@@ -157,22 +157,21 @@ def _disk_means_at_points(
 
     for start in range(0, K, chunk_size):
         end = min(start + chunk_size, K)
-        r0 = rows_0b[start:end][:, None]   # [k,1]
-        c0 = cols_0b[start:end][:, None]   # [k,1]
+        r0 = rows_0b[start:end][:, None]  
+        c0 = cols_0b[start:end][:, None]  
 
-        rr = r0 + dy[None, :]              # [k,m]
-        cc = c0 + dx[None, :]              # [k,m]
+        rr = r0 + dy[None, :]              
+        cc = c0 + dx[None, :]             
         inb = (rr >= 0) & (rr < H) & (cc >= 0) & (cc < W)
 
         if not inb.any():
             out[start:end] = np.nan
             continue
 
-        lin = rr * W + cc                  # [k,m] linear indices
-        vals = flat[lin[inb]]              # stacked in-bounds samples for all k
+        lin = rr * W + cc        
+        vals = flat[lin[inb]]      
 
-        # split back per fixation using counts
-        counts = inb.sum(axis=1, dtype=np.int64)  # samples per fixation
+        counts = inb.sum(axis=1, dtype=np.int64)  
         splits = np.cumsum(counts[:-1], dtype=np.int64)
         parts = np.split(vals, splits)
         out[start:end] = np.array(
@@ -182,18 +181,16 @@ def _disk_means_at_points(
     return out
 
 def _validate_nss_inputs(fixations_df: pd.DataFrame):
+    """Ensure each needed column exists"""
     needed = {"ImageName", "session", "image_type", "participant", "x_deg_centered", "y_deg"}
     missing = needed - set(fixations_df.columns)
     if missing:
         raise ValueError(f"Missing columns in fixations DF: {missing}")
 
-def _sigma_from_ppd(pixels_per_vdegree: float) -> float:
-    return float(pixels_per_vdegree) / 2.0
-
 def _group_fixations_for_image(fixations_df: pd.DataFrame, img: Any, cond: Any, img_type: Any) -> pd.DataFrame:
+    """Return subset of fixations for a specific image, session, and image type."""
     return fixations_df.query(
-        "ImageName == @img and session == @cond and image_type == @img_type"
-    )
+        "ImageName == @img and session == @cond and image_type == @img_type")
 
 def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H: int, W: int):
     """Return list of (h1,w1) per subject, ordered by participant (as string)."""
@@ -201,7 +198,7 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
     if df_group.empty:
         return coords
 
-    # stable + robust ordering
+    # order by participant as string to ensure consistent ordering with FixMaps
     dfg = df_group.assign(participant_str=df_group["participant"].astype(str)).sort_values(["participant_str", "trial_number"])
     g = dfg.groupby(["participant_str", "trial_number"], dropna=False)
 
@@ -209,16 +206,21 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
         xdeg = pd.to_numeric(df_subj["x_deg_centered"], errors="coerce").to_numpy()
         ydeg = pd.to_numeric(df_subj["y_deg"],          errors="coerce").to_numpy()
         ok = np.isfinite(xdeg) & np.isfinite(ydeg)
+        # Translate into screen pixel matrices 
         if ok.any():
             h1, w1 = _deg_to_image_pixels(
                 x_deg=xdeg[ok], y_deg=ydeg[ok],
                 ppd=pixels_per_vdegree, width=W, height=H
             )
-            inside = (h1 >= 1) & (h1 <= H) & (w1 >= 1) & (w1 <= W)
+            inside = (h1 >= 1) & (h1 <= H) & (w1 >= 1) & (w1 <= W) # double check if anything falls out of bounds
+            n_out = np.sum(~inside)
+            if n_out > 0 and DEBUG:
+                print(f"⚠️ [Boundary Filter] Dropped {n_out} out-of-bounds pixels for image: {df_subj['ImageName'].iloc} (Session {df_subj['session'].iloc})")
+            
             coords.append((np.int32(h1[inside]), np.int32(w1[inside])))
 
         else:
-            coords.append((np.array([], np.int32), np.array([], np.int32)))
+            coords.append((np.array([], np.int32), np.array([], np.int32))) # dummy allocation for dead cells, empty arrays
     return coords
 
 def _stack_subject_maps(subjects: list[dict], H: int, W: int) -> np.ndarray:
@@ -293,7 +295,7 @@ def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegr
     H, W = int(image_height), int(image_width)
     _validate_nss_inputs(fixations_df)
 
-    sigma = _sigma_from_ppd(pixels_per_vdegree)
+    sigma = SIGMA
     dy_off, dx_off = _disk_offsets(sigma)
 
     Results = {"image": [], "meanNSSSimilarityPerImage": [],
@@ -390,7 +392,7 @@ def calculate_NSS_crossphase(
     H, W = int(image_height), int(image_width)
     _validate_nss_inputs(fixations_df)
 
-    sigma = _sigma_from_ppd(pixels_per_vdegree)
+    sigma = SIGMA
     dy_off, dx_off = _disk_offsets(sigma)
 
     # Fast lookup for reference maps
