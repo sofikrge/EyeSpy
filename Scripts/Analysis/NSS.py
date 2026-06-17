@@ -278,7 +278,7 @@ def _group_fixations_for_image(fixations_df: pd.DataFrame, img: Any, cond: Any, 
         "ImageName == @img and session == @cond and image_type == @img_type"
     )
 
-def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H: int, W: int):
+def _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W):
     """Return list of (h1,w1) per subject, ordered by participant (as string)."""
     coords = []
     if df_group.empty:
@@ -292,16 +292,24 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
         xdeg = pd.to_numeric(df_subj["x_deg_centered"], errors="coerce").to_numpy()
         ydeg = pd.to_numeric(df_subj["y_deg"],          errors="coerce").to_numpy()
         ok = np.isfinite(xdeg) & np.isfinite(ydeg)
+
         if ok.any():
             h1, w1 = _deg_to_image_pixels(
-                x_deg=xdeg[ok], y_deg=ydeg[ok],
-                ppd=pixels_per_vdegree, width=W, height=H
+                x_deg=xdeg[ok], y_deg=ydeg[ok], 
+                ppd=pixels_per_vdegree, 
+                width=W, height=H
             )
             inside = (h1 >= 1) & (h1 <= H) & (w1 >= 1) & (w1 <= W)
+            
+            # This print tells us exactly how many fixations survive for this participant
+            print(f"DEBUG: Participant {df_subj['participant'].iloc} | "
+                  f"{ok.sum()} finite, {inside.sum()} inside bounds ({H}x{W}).")
+            
             coords.append((np.int32(h1[inside]), np.int32(w1[inside])))
-
         else:
+            print(f"DEBUG: No finite coordinates for participant {df_subj['participant'].iloc}")
             coords.append((np.array([], np.int32), np.array([], np.int32)))
+
     return coords
 
 def _stack_subject_maps(subjects: list[dict], H: int, W: int) -> np.ndarray:
@@ -399,6 +407,13 @@ def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegr
             # --- SURGICAL ADDITION: Get Participant IDs ---
             participant_ids = sorted(df_group["participant"].astype(str).unique())
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+
+            if img == '1009.jpg' and cond == 'U':
+                print(f"DEBUG: 1009/U/Aware. coords_list length: {len(coords_list)}")
+                for i, (h, w) in enumerate(coords_list):
+                    print(f"  -> Participant index {i} has {len(h)} valid coordinates.")
+            
+            n_subj = len(coords_list)
 
             subj_scores = []
             for j in range(n):
@@ -625,6 +640,18 @@ def calculate_NSS_crossphase(
                 (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
                 key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
             )
+
+            # --- ADD THIS DEBUG BLOCK ---
+            if img == '1009.jpg' and awareness_val == 'unconscious_aware':
+                print(f"DEBUG: Checking data for 1009/U/Aware. Rows in df_group: {len(df_group)}")
+                if len(df_group) > 0:
+                    print(f"DEBUG: Participants found in df_group: {df_group['participant'].unique()}")
+                else:
+                    print("DEBUG: df_group is empty. The filter dropped all rows.")
+            # ----------------------------
+            
+            coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
             n_subj = len(coords_list)
 
@@ -889,6 +916,22 @@ if __name__ == "__main__":
 
     print(f"Ready: {len(FixMaps)} images in FixMaps.")
 
+    # === RAW DATA AUDITOR ===
+    print(f"\n[DEBUG] Checking raw participant counts for 1009.jpg / U / unconscious_aware")
+    # Access the fixations dataframe (already loaded)
+    df_raw = fixations[(fixations['ImageName'] == '1009.jpg') & 
+                       (fixations['session'] == 'U') & 
+                       (fixations['awareness'] == 'unconscious_aware')]
+    
+    unique_subs = df_raw['participant'].unique()
+    print(f"Total fixation events for 1009/U/Aware: {len(df_raw)}")
+    print(f"Total unique participants for 1009/U/Aware: {len(unique_subs)}")
+    if len(unique_subs) > 0:
+        print(f"Participants found: {unique_subs}")
+    else:
+        print("No fixations found in the raw dataframe for this condition.")
+    # ========================
+
     if DEBUG: 
         summarise_fixmaps(FixMaps)
         # Build a quick index of what's in FixMaps
@@ -1010,6 +1053,21 @@ if __name__ == "__main__":
         with open(cross_cache_path, "wb") as f:
             pickle.dump({"meta": cross_meta, "data": CrossResults}, f, protocol=pickle.HIGHEST_PROTOCOL)
         print(f"Saved Cross-phase NSS → {cross_cache_path}")
+
+    # === DEBUG INSERTION START ===
+    print(f"DEBUG: Inspecting 1009.jpg for U/unconscious_aware...")
+    found_1009 = False
+    for entry in CrossResults['image']:
+        if entry['img'] == '1009.jpg' and entry['condition'] == 'U' and entry.get('awareness') == 'unconscious_aware':
+            print(f"Found 1009/U/Aware! Subjects: {len(entry['subject'])}")
+            if len(entry['subject']) == 0:
+                print(" -> WARNING: The subject list is empty for 1009/U/Aware (The filter discarded it).")
+            found_1009 = True
+            break # Stop looking once found
+
+    if not found_1009:
+        print(" -> 1009.jpg/Unconscious_Aware was never created in the CrossResults dictionary.")
+    # === DEBUG INSERTION END ===
 
     # Cross-phase quick report
     intact_vals    = np.asarray(CrossResults["meanNSS_intact_per_image"], dtype=float)
