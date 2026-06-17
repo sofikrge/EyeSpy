@@ -1,26 +1,7 @@
 # OldNSS.py
 
-# yes yes yes
-
 """
 NSS (Normalized Scanpath Saliency) Analysis Module for Eye-Gaze Data
-
-This script computes NSS similarity metrics for eye-gaze fixations across different image types
-and visibility conditions (conscious vs. unconscious). It performs within-phase and cross-phase
-NSS analyses using leave-one-subject-out (LOSO) methodology with Gaussian-blurred fixation maps.
-Key Functionality:
-- Load and preprocess fixation data with participant/session exclusions
-- Convert pixel coordinates to visual degrees and map to image pixel space
-- Generate per-subject and group-level fixation maps with Gaussian filtering
-- Calculate within-phase NSS: average fixation map saliency for each observer within each experiment phase (disambiguating intact vs scrambled, mooney)
-- Calculate cross-phase NSS: Mooney image fixations against disambiguation reference maps (intact vs scrambled)
-- Export participant-level results for 2x3 and 2x2 ANOVA designs in Jamovi
-- Generate summary statistics, visualizations, and verification ANOVAs
-Outputs:
-- Cached fixation maps and NSS computations (*.pkl), if changed something and want to rerun script, delete this file first!
-- Summary parquets with condition-wise aggregates (*.parquet)
-- CSV exports for Jamovi statistical analysis (*.csv)
-- Publication-ready plots (*.png)
 """
 
 #%%
@@ -30,34 +11,16 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 import pickle
 from typing import Any
-import matplotlib.pyplot as plt
 import zlib
-import matplotlib as mpl
-import seaborn as sns
-from statsmodels.stats.anova import AnovaRM
-
-mpl.rcParams.update({
-    "savefig.transparent": True,  # make saved figs have transparent background
-    "figure.facecolor": "none",   # transparent figure
-    "axes.facecolor": "none"      # transparent axes
-})
 
 #%% === CONFIG ===
 FIX_FILE            = Path("data/NSS_all_fixations_clean.parquet")
 OUTPUT_DIR          = Path("analysesresults/NSS") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-FIGURES_DIR         = Path("Figures/nss_analyses") ; FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-SCREEN_WIDTH_PX     = 1920
-SCREEN_WIDTH_CM     = 53.2
-VIEWING_DIST_CM     = 74.0
 IMAGE_HEIGHT        = 600
 IMAGE_WIDTH         = 800
 DEBUG               = True
 
-PALETTE = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
-
-IMAGE_W_DEG = 9.99
-IMAGE_H_DEG = 7.50
-MASK_PPD = 48.55  # according to screen dimensions
+MASK_PPD            = 48.55  
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
@@ -78,11 +41,6 @@ def load_fixations(path: Path = FIX_FILE) -> pd.DataFrame:
         print(f"Loaded {len(df):,} fixation rows from {path}")
     return df
 
-def pixels_to_vdegrees(pixels, *, screen_width_px=SCREEN_WIDTH_PX,screen_width_cm=SCREEN_WIDTH_CM,viewing_distance_cm=VIEWING_DIST_CM):
-    pixels = np.asarray(pixels, dtype=float)
-    cm_per_pixel = screen_width_cm / float(screen_width_px)
-    return np.degrees(2.0 * np.arctan(((pixels * 0.5) * cm_per_pixel) / float(viewing_distance_cm)))
-
 def _deg_to_image_pixels(x_deg, y_deg, ppd, *, width=IMAGE_WIDTH, height=IMAGE_HEIGHT):
     w_1based = round_half_away_from_zero((width  / 2.0) + x_deg * ppd).astype(int)
     h_1based = round_half_away_from_zero((height / 2.0) + y_deg * ppd).astype(int)  # ← FIXED: removed minus sign
@@ -91,13 +49,6 @@ def _deg_to_image_pixels(x_deg, y_deg, ppd, *, width=IMAGE_WIDTH, height=IMAGE_H
 def round_half_away_from_zero(x):
     x = np.asarray(x, dtype=float)
     return (np.sign(x) * np.floor(np.abs(x) + 0.5)).astype(int)
-
-def pixels_per_visual_degree(
-    screen_width_px=SCREEN_WIDTH_PX,
-    screen_width_cm=SCREEN_WIDTH_CM,
-    viewing_distance_cm=VIEWING_DIST_CM,) -> float:
-    # CORRECTED: Return mask PPD (800 pixels / 9.99 degrees)
-    return IMAGE_WIDTH / 9.99  # = 80.08 pixels per degree
 
 def _meta_block(ppd: float, image_h: int, image_w: int, group_cols: tuple[str, ...], *,
                 tag: str, extra: dict | None = None) -> dict:
@@ -179,41 +130,6 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
         FixMaps.append(entry)
 
     return FixMaps
-
-def summarise_fixmaps(FixMaps, n=10):
-    """
-    Print summary of how many groups per condition / image_type,
-    and subjects per group.
-    """
-    rows = []
-    for entry in FixMaps:
-        rows.append({
-            "img": entry["img"],
-            "condition": entry["condition"],
-            "image_type": entry["image_type"],
-            "n_subjects": len(entry.get("subject", [])),
-        })
-    df = pd.DataFrame(rows)
-
-    print(f"\nSummary: {len(df)} groups total")
-
-    # Breakdown by condition
-    print("\nGroups per condition:")
-    print(df["condition"].value_counts())
-
-    # Breakdown by image_type
-    print("\nGroups per image_type:")
-    print(df["image_type"].value_counts())
-
-    # Subject stats
-    print("\nSubjects per group (distribution):")
-    print(df["n_subjects"].describe())
-
-    # Example rows
-    # print("\nExamples:")
-    # print(df.head(n))
-
-    return df
 
 #%% === NSS like Shaked's Matlab ===
 def _disk_offsets(radius_px: float) -> tuple[np.ndarray, np.ndarray]:
@@ -431,96 +347,6 @@ def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegr
 
     return Results
 
-def summarise_nss_to_parquet(NSSResults: dict, out_path: Path) -> pd.DataFrame:
-    """
-    Build a 6-row summary grouped by (condition, image_type) from NSSResults.
-    Only includes images whose per-image NSS is finite (like MATLAB's drop-NaN step).
-    """
-    rows = []
-    img_means = NSSResults.get("meanNSSSimilarityPerImage", [])
-    images = NSSResults.get("image", [])
-    for i, rec in enumerate(images):
-        img_mean = img_means[i] if i < len(img_means) else np.nan
-        cond = rec.get("condition")
-        img_type = rec.get("image_type")
-        n_subj= len(rec.get("subject", []))
-        rows.append({
-            "condition": cond,
-            "image_type": img_type,
-            "img_mean": float(img_mean),
-            "n_subjects": int(n_subj) if np.isfinite(img_mean) else 0,  # count subjects only for kept images
-        })
-
-    df = pd.DataFrame(rows)
-    kept = df[np.isfinite(df["img_mean"])].copy()
-    if kept.empty:
-        # still write an empty frame with expected columns
-        out = kept.groupby(["condition", "image_type"], dropna=False).size().reset_index(name="n_images_kept")
-        out["subjects_total"] = 0
-        out["mean_NSS"] = np.nan
-        out["std_NSS"] = np.nan
-        out["ste_NSS"] = np.nan
-    else:
-        grp = kept.groupby(["condition", "image_type"], dropna=False)
-        out = grp.agg(
-            n_images_kept=("img_mean", "count"),
-            subjects_total=("n_subjects", "sum"),
-            mean_NSS=("img_mean", "mean"),
-            std_NSS=("img_mean", lambda x: float(np.std(x.to_numpy(dtype=float), ddof=1)) if len(x) > 1 else np.nan),
-        ).reset_index()
-        out["ste_NSS"] = out["std_NSS"] / np.sqrt(out["n_images_kept"].clip(lower=1))
-
-    out = out.sort_values(["condition", "image_type"]).reset_index(drop=True)
-    out.to_parquet(out_path, index=False)
-    print(f"Saved NSS summary → {out_path}")
-    return out
-
-def plot_nss_summary(parquet_path: Path):
-    """
-    Load NSS summary parquet (condition × image_type) and save grouped bar plot.
-    - Colors: c = green, u = purple
-    - Bars grouped by image_type so c/u are next to each other
-    """
-    df = pd.read_parquet(parquet_path)
-
-    # Ensure consistent ordering of image types
-    image_types = ["disamb_intact", "disamb_not_intact", "mooney_post_intact"]
-    conditions = ["C", "U"]
-    color_map = {"C": PALETTE[1], "U": PALETTE[0]}
-
-    # Build grouped data
-    df = df.set_index(["image_type", "condition"]).sort_index()
-    x = range(len(image_types))
-    width = 0.35  # bar width per condition
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-
-    for i, cond in enumerate(conditions):
-        offset = (i - 0.5) * width
-        vals = [df.loc[(img_type, cond), "mean_NSS"] if (img_type, cond) in df.index else np.nan
-                for img_type in image_types]
-        errs = [df.loc[(img_type, cond), "ste_NSS"] if (img_type, cond) in df.index else np.nan
-                for img_type in image_types]
-        ax.bar([pos + offset for pos in x], vals, width=width, yerr=errs, capsize=5, alpha=0.8, color=color_map[cond], label=cond)
-
-
-
-    ax.set_ylabel("Mean NSS")
-    ax.set_title("Within-phase NSS - Image-level means")
-    ax.set_xticks(x)
-    ax.set_xticklabels(image_types, rotation=30, ha="right")
-    ax.legend(title="Condition")
-
-    plt.tight_layout()
-    # Save to the new Figures folder, keeping the same filename
-    out_path = FIGURES_DIR / parquet_path.with_suffix(".png").name
-    plt.savefig(out_path, dpi=300)
-    plt.close(fig)
-    print(f"Saved NSS summary plot → {out_path}")
-
 #%% === NSS cross-phase ===
 def _index_fixmaps(FixMaps):
     """
@@ -540,36 +366,6 @@ def _aggregate_by_policy(subj_scores: list[float], policy: str) -> float:
         return float(arr.mean()) if np.all(np.isfinite(arr)) else float("nan")
     # default permissive
     return float(np.nanmean(arr)) if np.isfinite(arr).any() else float("nan")
-
-def _summarize_by_condition(per_image_records: list[dict]) -> list[dict]:
-    """
-    Collapse across images within each condition separately for:
-    intact, scrambled, and (intact - scrambled).
-    Uses sample std (ddof=1) and STE = std / sqrt(N) on finite images.
-    """
-    out = []
-    df = pd.DataFrame(per_image_records)
-    if df.empty:
-        return out
-    for cond, d in df.groupby("condition", dropna=False):
-        row = {"condition": cond}
-        for key in ["NSS_intact_img", "NSS_scrambled_img", "NSS_diff_img"]:
-            vals = d[key].to_numpy(dtype=float)
-            finite = np.isfinite(vals)
-            n = int(finite.sum())
-            if n == 0:
-                mean = std = ste = float("nan")
-            else:
-                kept = vals[finite]
-                mean = float(kept.mean())
-                std  = float(kept.std(ddof=1)) if n > 1 else float("nan")
-                ste  = float(std / np.sqrt(n)) if n > 1 else float("nan")
-            row[f"mean_{key}"] = mean
-            row[f"std_{key}"]  = std
-            row[f"ste_{key}"]  = ste
-            row[f"n_images_{key}"] = n
-        out.append(row)
-    return out
 
 def calculate_NSS_crossphase(
     FixMaps,
@@ -764,9 +560,6 @@ def calculate_NSS_crossphase(
                 "awareness": awareness_val,
             })
 
-    # Condition-wise summaries
-    Results["summary_by_condition"] = _summarize_by_condition(per_image_records)
-
     n_total = len(Results["image"])
     n_valid_i = sum(np.isfinite(r["NSS_intact_img"]) for r in Results["image"])
     n_valid_s = sum(np.isfinite(r["NSS_scrambled_img"]) for r in Results["image"])
@@ -782,87 +575,6 @@ def calculate_NSS_crossphase(
 
     return Results
 
-def summarise_nss_crossphase_to_parquet(Cross: dict, out_path: Path) -> pd.DataFrame:
-    """
-    Build a condition × ref_type summary parquet from cross-phase NSS.
-    Input: Cross = output of calculate_NSS_crossphase(...)
-    Output parquet columns:
-        condition, ref_type, n_images, mean_NSS, std_NSS, ste_NSS
-    """
-    # flatten per-image
-    rows = []
-    for rec in Cross.get("image", []):
-        rows.append({"img": rec["img"], "condition": rec["condition"], "ref_type": "intact",
-                     "NSS_img": float(rec.get("NSS_intact_img", np.nan)),
-                     "n_subjects": len(rec.get("subject", []))})
-        rows.append({"img": rec["img"], "condition": rec["condition"], "ref_type": "scrambled",
-                     "NSS_img": float(rec.get("NSS_scrambled_img", np.nan)),
-                     "n_subjects": len(rec.get("subject", []))})
-    df = pd.DataFrame(rows)
-
-    if df.empty:
-        out = pd.DataFrame({
-            "condition": [], "ref_type": [], "n_images": [],
-            "mean_NSS": [], "std_NSS": [], "ste_NSS": []
-        })
-    else:
-        kept = df[np.isfinite(df["NSS_img"])].copy()
-        grp = kept.groupby(["condition", "ref_type"], dropna=False)
-        out = grp.agg(
-            n_images=("img", "nunique"),
-            mean_NSS=("NSS_img", "mean"),
-            std_NSS=("NSS_img", lambda x: float(np.std(x.to_numpy(dtype=float), ddof=1)) if len(x) > 1 else np.nan),
-        ).reset_index()
-        out["ste_NSS"] = out["std_NSS"] / np.sqrt(out["n_images"].clip(lower=1))
-
-    out = out.sort_values(["condition", "ref_type"]).reset_index(drop=True)
-    out_path = Path(out_path)
-    out.to_parquet(out_path, index=False)
-    print(f"Saved NSS cross-phase summary → {out_path}")
-    return out
-
-def plot_nss_crossphase_summary(parquet_path: Path):
-    """
-    Plot grouped bars per condition with Intact vs Scrambled (error = STE).
-    Saves PNG next to the parquet, matching your existing plot style.
-    """
-    df = pd.read_parquet(parquet_path)
-
-    # --- FIX: Define Data Keys vs. Display Labels ---
-    data_conditions = ["C", "U"]           # What is in the dataframe index
-    display_labels = ["Conscious", "Unconscious"] # What shows on the plot x-axis
-    
-    ref_types = ["intact", "scrambled"]
-    ref_labels = {"intact": "Intact", "scrambled": "Scrambled"}
-    palette_ref = {"intact": PALETTE[3], "scrambled": PALETTE[2]}
-
-    # Pivot for easy plotting
-    df = df.set_index(["condition", "ref_type"]).sort_index()
-
-    x = range(len(data_conditions))
-    width = 0.35
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    for i, ref in enumerate(ref_types):
-        offset = (i - 0.5) * width
-        vals = [df.loc[(cond, ref), "mean_NSS"] if (cond, ref) in df.index else np.nan for cond in data_conditions]
-        errs = [df.loc[(cond, ref), "ste_NSS"] if (cond, ref) in df.index else np.nan for cond in data_conditions]
-        ax.bar([pos + offset for pos in x], vals, width=width, yerr=errs, capsize=5, alpha=0.5, color=palette_ref[ref], label=ref_labels[ref])
-
-    ax.set_ylabel("Mean NSS")
-    ax.set_title("Cross-phase NSS: Mooney fixations vs disambiguation maps - Image-level")
-    ax.set_xticks(x)
-    ax.set_xticklabels(display_labels)
-    ax.legend(title="Reference")
-
-    plt.tight_layout()
-    out_path = FIGURES_DIR / Path(parquet_path).with_suffix(".png").name
-    plt.savefig(out_path, dpi=300)
-    plt.close(fig)
-    print(f"Saved NSS cross-phase plot → {out_path}")
-
 #%% === MAIN ===
 if __name__ == "__main__":
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True) # <--- ADD THIS
@@ -871,25 +583,6 @@ if __name__ == "__main__":
     fixations = load_fixations()
 
     ppd = MASK_PPD  # Use mask PPD, not screen PPD
-    if DEBUG:
-        print(f"Pixels per visual degree: {ppd}")
-
-        print("\n[Inventory] Unique images by image_type × condition:")
-        print(
-            fixations.groupby(["image_type", "session"])["ImageName"]
-                    .nunique()
-                    .reset_index(name="n_unique_images")
-                    .sort_values(["image_type", "session"])
-                    .to_string(index=False)
-        )
-        print("\n[Inventory] Unique images by image_type (overall):")
-        print(
-            fixations.groupby("image_type")["ImageName"]
-                    .nunique()
-                    .reset_index(name="n_unique_images")
-                    .sort_values("image_type")
-                    .to_string(index=False)
-        )
 
     cache_path = OUTPUT_DIR / "FixMaps_full.pkl"
     meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v2")
@@ -911,51 +604,6 @@ if __name__ == "__main__":
 
     print(f"Ready: {len(FixMaps)} images in FixMaps.")
 
-    if DEBUG: 
-        summarise_fixmaps(FixMaps)
-
-        if DEBUG:
-            from collections import Counter
-            thresh = max(MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS)
-            low_n = [fm for fm in FixMaps if len(fm.get("subject", [])) < thresh]
-            print(f"[FixMaps] {len(low_n)}/{len(FixMaps)} groups below n_subj={thresh}, by image_type:")
-            print(Counter(fm["image_type"] for fm in low_n))
-
-        # Build a quick index of what's in FixMaps
-        fm_keys = {(fm["img"], fm["condition"], fm["image_type"]) for fm in FixMaps}
-        mooney_pairs = sorted({(fm["img"], fm["condition"]) for fm in FixMaps if fm["image_type"] == "mooney_post_intact"})
-
-        missing_scr = [(img, cond) for (img, cond) in mooney_pairs
-                    if (img, cond, "disamb_not_intact") not in fm_keys]
-
-        print(f"[probe] Mooney (img,cond) pairs missing scrambled reference: {len(missing_scr)}")
-        if missing_scr:
-            # For each missing pair, show how many *clean* disamb fixations exist (intact vs scrambled)
-            q = (fixations.query("image_type in ['disamb_intact','disamb_not_intact']")
-                # --- CHANGE 1: "condition" -> "session" ---
-                .groupby(["ImageName", "session", "image_type"], dropna=False)
-                .size()
-                .rename("n_fix")
-                .reset_index())
-
-            pivot = (q.pivot_table(
-                                # --- CHANGE 2: "condition" -> "session" ---
-                                index=["ImageName", "session"],
-                                columns="image_type",
-                                values="n_fix",
-                                fill_value=0)
-                    .sort_index())
-
-            # Print just the missing pairs; if KeyError, it means truly zero rows exist
-            try:
-                print(pivot.loc[missing_scr])
-            except KeyError:
-                # Fallback: print a per-pair line if the pivot has no entry at all
-                for img, cond in missing_scr:
-                    # --- CHANGE 3: "condition" -> "session" (in the filters) ---
-                    n_intact = int(q[(q["ImageName"]==img) & (q["session"]==cond) & (q["image_type"]=="disamb_intact")]["n_fix"].sum())
-                    n_scram  = int(q[(q["ImageName"]==img) & (q["session"]==cond) & (q["image_type"]=="disamb_not_intact")]["n_fix"].sum())
-                    print(f"{img} / {cond}: disamb_intact={n_intact}, disamb_not_intact={n_scram}")
     # --- NSS calculation ---
     nss_cache_path = OUTPUT_DIR / "NSS_WithinPhase.pkl"
     nss_meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"),
@@ -1004,12 +652,6 @@ if __name__ == "__main__":
     print(f"NSS mean = {NSSResults['meanNSSSimilarity']:.4f}, "
           f"std = {NSSResults['stdNSSSimilarity']:.4f}, "
           f"ste = {NSSResults['steNSSSimilarity']:.4f}")
-
-    # --- Write 6-row summary parquet ---
-    nss_summary_path = OUTPUT_DIR / "NSS_withinphase_descriptives.parquet"
-    summarise_nss_to_parquet(NSSResults, nss_summary_path)
-    
-    plot_nss_summary(nss_summary_path)
     
     # --- NSS cross-phase calculation ---
     cross_cache_path = OUTPUT_DIR / "NSS_crossphase_descriptives.pkl"
@@ -1058,31 +700,6 @@ if __name__ == "__main__":
     if keep_d.any():
         print(f"Cross Diff:     mean={np.nanmean(diff_vals):.4f}")
 
-    # --- Cross-phase parquet + plot ---
-    cross_summary_path = OUTPUT_DIR / "NSS_crossphase_summary.parquet"
-    summarise_nss_crossphase_to_parquet(CrossResults, cross_summary_path)
-    plot_nss_crossphase_summary(cross_summary_path)
-    
-    # ==========================================
-    # === DATA RETENTION SUMMARY (DEBUG) ===
-    # ==========================================
-    print(f"\n📊 Data Retention Summary (Analyzed & Averaged for Jamovi):")
-    
-    # 1. Within-Phase Stats
-    w_imgs = NSSResults.get('image', [])
-    w_unique = set(entry['img'] for entry in w_imgs)
-    w_c = set(entry['img'] for entry in w_imgs if entry['condition'] == 'C')
-    w_u = set(entry['img'] for entry in w_imgs if entry['condition'] == 'U')
-    print(f"   Within-Phase: {len(w_unique)} unique images (C={len(w_c)}, U={len(w_u)})")
-
-    # 2. Cross-Phase Stats
-    c_imgs = CrossResults.get('image', [])
-    c_unique = set(entry['img'] for entry in c_imgs)
-    c_c = set(entry['img'] for entry in c_imgs if entry['condition'] == 'C')
-    c_u = set(entry['img'] for entry in c_imgs if entry['condition'] == 'U')
-    print(f"   Cross-Phase:  {len(c_unique)} unique images (C={len(c_c)}, U={len(c_u)})")
-    print("-" * 50)
-
     # ==========================================
     # === JAMOVI EXPORT: WITHIN-PHASE (2x3) ===
     # ==========================================
@@ -1108,49 +725,13 @@ if __name__ == "__main__":
                     'NSS': subj['NSSSimPerSubj']
                 })
 
-    pd.DataFrame(w_flat).to_csv(OUTPUT_DIR / "NSS_WithinPhase_Long.csv", index=False)
-
     if w_flat:
         # 2. Convert to DataFrame and Aggregate
         df_w_long = pd.DataFrame(w_flat)
-
-        # --- NEW: SAVE LONG FORMAT HERE ---
         long_csv_path = OUTPUT_DIR / "NSS_WithinPhase_LongFormat.csv"
         df_w_long.to_csv(long_csv_path, index=False)
         print(f"✅ Saved Within-Phase LONG Dataset to: {long_csv_path}")
-        # ----------------------------------
-
-        df_w_agg = df_w_long.groupby(['Participant', 'Session', 'ImageType'], as_index=False).mean(numeric_only=True)
-
-        # Diagnostic: Find incomplete participants
-        counts = df_w_agg.groupby('Participant').size()
-        expected_rows = 8  # 2 sessions × 4 phases
-        incomplete = counts[counts != expected_rows].index.tolist()
-        complete = counts[counts == expected_rows].index.tolist()
-
-        print(f"\n⚠️ Within-Phase: {len(incomplete)} participants excluded due to missing cells:")
-        for subj in incomplete:
-            subj_data = df_w_agg[df_w_agg['Participant'] == subj]
-            found = set(zip(subj_data['Session'], subj_data['ImageType']))
-            print(f"   ❌ Participant {subj}: Has {len(found)}/8 cells")
-
-        # 3. Pivot to Wide Format
-        # We pivot on BOTH Session and ImageType to get 6 columns
-        df_w_wide = df_w_agg.pivot(index='Participant', columns=['Session', 'ImageType'], values='NSS')
         
-        # 4. Flatten columns (e.g. NSS_C_mooney, NSS_C_disamb_intact, etc.)
-        df_w_wide.columns = [f"NSS_{col[0]}_{col[1]}" for col in df_w_wide.columns]
-        df_w_wide = df_w_wide.reset_index()
-        
-        within_csv_path = OUTPUT_DIR / "NSS_WithinPhase_ParticipantLevel_Wide.csv"
-        df_w_wide.to_csv(within_csv_path, index=False)
-        print(f"✅ Saved Within-Phase 2x3 Dataset to: {within_csv_path}")
-        print(f"   -> Actual columns: {df_w_wide.columns.tolist()}")
-        print("      NSS_C_mooney, NSS_C_disamb_intact, NSS_C_disamb_not_intact")
-        print("      NSS_U_mooney, NSS_U_disamb_intact, NSS_U_disamb_not_intact")
-    else:
-        print("⚠️ No Participant IDs found. Did you apply the Step 1 patch?")
-    # ==========================================
     # === JAMOVI EXPORT: Cross Phase 2x2 ANOVA FORMAT ===
     # ==========================================
     print("\n📦 Creating Participant-Level Dataset for Jamovi (Wide Format)...")
@@ -1178,7 +759,6 @@ if __name__ == "__main__":
     # We average across all images for each person-session combo
     df_long = pd.DataFrame(flat_data)
 
-
     # --- NEW SURGICAL ADDITION ---
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
     df_long['Experiment_Half'] = df_long.groupby(['Participant', 'Session'])['Trial'].transform(
@@ -1202,135 +782,3 @@ if __name__ == "__main__":
     cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
     df_long_fully_melted.to_csv(cross_long_path, index=False)
     print(f"✅ Saved Cross-Phase LONG Dataset to: {cross_long_path}")
-    # ----------------------------------
-    
-    # --- START DEBUG PRINTS ---
-    print("\n--- JAMOVI EXPORT DEBUG ---")
-    
-    # SCENARIO 1: CrossResults is empty or malformed
-    if not CrossResults or 'image' not in CrossResults:
-        print("❌ DEBUG: 'CrossResults' dictionary is missing or does not have an 'image' key.")
-    elif not CrossResults['image']:
-        print("❌ DEBUG: 'CrossResults['image']' list is EMPTY. No cross-phase data was generated.")
-        print("   This is the root cause. Check the 'calculate_NSS_crossphase' function and its inputs.")
-    else:
-        print(f"✅ DEBUG: 'CrossResults['image']' contains {len(CrossResults['image'])} records.")
-
-    # SCENARIO 2: flat_data list is empty after the loop
-    if not flat_data:
-        print("❌ DEBUG: 'flat_data' list is EMPTY after processing CrossResults.")
-        if CrossResults and CrossResults['image']:
-            print("   This means the loop over 'CrossResults['image']' ran, but no data was appended.")
-            print("   Possible reasons:")
-            print("   1. The 'subject' list inside each 'img_data' was empty (e.g., due to MIN_SUBJ_PER_IMAGE_CROSS filter).")
-            print("   2. The 'ParticipantID' key was missing from the 'subj' dictionaries.")
-            # Let's check the first entry for clues
-            first_entry = CrossResults['image'][0]
-            if 'subject' not in first_entry:
-                 print("      -> Clue: The key 'subject' is missing from the first image record.")
-            elif not first_entry['subject']:
-                 print("      -> Clue: The 'subject' list in the first image record is empty.")
-            elif 'ParticipantID' not in first_entry['subject'][0]:
-                 print("      -> Clue: The key 'ParticipantID' is missing from the first subject record.")
-                 print(f"         First subject record keys: {list(first_entry['subject'][0].keys())}")
-    else:
-        print(f"✅ DEBUG: 'flat_data' list contains {len(flat_data)} records.")
-    
-    # SCENARIO 3: The resulting DataFrame is empty or has no 'Participant' column
-    if df_long.empty:
-        print("❌ DEBUG: The 'df_long' DataFrame is EMPTY. The script will fail on the next line.")
-    else:
-        print(f"✅ DEBUG: 'df_long' DataFrame created with {len(df_long)} rows and columns: {df_long.columns.tolist()}")
-    print("--- END DEBUG PRINTS ---\n")
-    # --- END DEBUG PRINTS ---
-
-    # Group by Participant & Session to get their average performance
-    df_agg = df_long.groupby(['Participant', 'Session', 'Awareness'], as_index=False).mean(numeric_only=True)
-
-    # 3. Pivot to Wide Format (Rows=Subjects, Cols=Conditions)
-    df_wide = df_agg.pivot(index='Participant', columns=['Session', 'Awareness'], values=['NSS_Intact', 'NSS_Scrambled'])
-    
-    # 4. Flatten the Multi-Level Columns
-    # This turns ('NSS_Intact', 'C') into 'NSS_Intact_C'
-    df_wide.columns = [f"{col[0]}_{col[1]}_{col[2]}" for col in df_wide.columns]
-    df_wide = df_wide.reset_index()
-
-    # 5. Save
-    jamovi_path = OUTPUT_DIR / "NSS_CrossPhase_ParticipantLevel_Wide.csv"
-    df_wide.to_csv(jamovi_path, index=False)
-    
-    print(f"✅ Saved Wide Format Dataset to: {jamovi_path}")
-    print("   -> Use this for Repeated Measures ANOVA in Jamovi.")
-    print("   -> Columns should be: Participant, NSS_Intact_C, NSS_Scrambled_C, NSS_Intact_U, NSS_Scrambled_U")
-
-    # Add to the end of NSS4Feb.py, before the ANOVA section
-    if DEBUG:
-        print("\n=== CROSS-SESSION DIAGNOSTIC ===")
-        
-        valid_intact = sum(1 for img in CrossResults['image'] 
-                        if np.isfinite(img['NSS_intact_img']))
-        valid_scrambled = sum(1 for img in CrossResults['image'] 
-                            if np.isfinite(img['NSS_scrambled_img']))
-        total = len(CrossResults['image'])
-        
-        print(f"Images with valid intact reference: {valid_intact}/{total} ({100*valid_intact/total:.1f}%)")
-        print(f"Images with valid scrambled reference: {valid_scrambled}/{total} ({100*valid_scrambled/total:.1f}%)")
-        
-        # Check for cross-session usage
-        cross_session_count = 0
-        for img_rec in CrossResults['image']:
-            # This requires keeping track during computation - see below
-            pass
-
-    # ==========================================
-    # === VIOLIN PLOT VISUALIZATION ===
-    # ==========================================
-    print("\n🎻 Generating Split Violin Plot...")
-    try:
-     
-
-        # 1. Prepare Data for Plotting
-        # We reuse 'df_agg' (the participant-level averages) created in the Jamovi step
-        plot_df = df_agg.melt(
-            id_vars=['Participant', 'Session', 'Awareness'],
-            value_vars=['NSS_Intact', 'NSS_Scrambled'],
-            var_name='ReferenceMap',
-            value_name='NSS'
-        )
-        # Clean labels for the legend
-        plot_df['ReferenceMap'] = plot_df['ReferenceMap'].str.replace('NSS_', '')
-
-        # 2. Setup the Figure
-        plt.figure(figsize=(10, 6))
-        sns.set_theme(style="whitegrid")
-
-        # 3. Create Split Violin Plot
-        # split=True combines Intact/Scrambled into a single violin per Session
-        sns.violinplot(
-            data=plot_df, 
-            x="Session", 
-            y="NSS", 
-            hue="ReferenceMap", 
-            split=True, 
-            inner="quart",  # Draws lines for the quartiles inside the violin
-            # Matches the Cross-Phase colors
-            palette={"Intact": PALETTE[3], "Scrambled": PALETTE[2]},
-            cut=0 # Prevents the violin from extending past the real data range
-        )
-
-        # 4. Labels and Title
-        plt.title("Double Dissociation: NSS Scores by Visibility & Reference", fontsize=14)
-        plt.ylabel("NSS Score (Higher = Better Alignment)", fontsize=12)
-        plt.xlabel("Visibility Condition", fontsize=12)
-        plt.legend(title="Reference Map")
-
-        # 5. Save
-        violin_path = FIGURES_DIR / "NSS_Double_Dissociation_Violin.png"
-        plt.savefig(violin_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Success! Violin plot saved to: {violin_path}")
-        # plt.show() # Uncomment if you want to see it pop up
-
-    except ImportError:
-        print("⚠️ plotting libraries missing. Run: pip install seaborn matplotlib")
-    except Exception as e:
-        print(f"⚠️ Plotting failed: {e}")
