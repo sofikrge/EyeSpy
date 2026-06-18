@@ -736,11 +736,15 @@ if __name__ == "__main__":
                     'NSS_Scrambled': subj['NSS_scrambled'],
                     'Awareness': img_data['awareness'],
                     'Trial': subj['ParticipantID'].split('_t')[1],
-                    'NSS_Disamb_Eccentricity': disamb_lookup.get((subj['ParticipantID'].split('_t')[0], image_name, session), np.nan),
+                    'Within-NSS-Typicality': disamb_lookup.get((subj['ParticipantID'].split('_t')[0], image_name, session), np.nan),
                 })
 
     # convert to pandas
     df_long = pd.DataFrame(flat_data)
+
+    matched = df_long['Within-NSS-Typicality'].notna().sum()
+    missing = df_long['Within-NSS-Typicality'].isna().sum()
+    print(f"\n📊 [Eccentricity Check] Matched: {matched} | Missing (NaN): {missing}")
 
     # find median trial no + label first vs second half of experiment for later analysis
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
@@ -750,7 +754,7 @@ if __name__ == "__main__":
 
     # Long format sasving
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Within-NSS-Typicality'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
