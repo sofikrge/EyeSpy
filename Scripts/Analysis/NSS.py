@@ -560,17 +560,16 @@ def calculate_NSS_crossphase(
 
 #%% === MAIN ===
 if __name__ == "__main__":
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True) # <--- ADD THIS
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Build fixmaps
+    # ---- Build fixmaps ----
     fixations = load_fixations()
-
-    ppd = MASK_PPD  # Use mask PPD, not screen PPD
-
+    ppd = MASK_PPD 
     cache_path = OUTPUT_DIR / "FixMaps_full.pkl"
     meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v2")
 
-    try:
+    # Open Fixmaps (heatmaps) cache
+    try: # attempt to open cache file, if meta matches, otherwise force recomputation
         with open(cache_path, "rb") as f:
             cache = pickle.load(f)
         if cache.get("meta") == meta:
@@ -581,11 +580,9 @@ if __name__ == "__main__":
     except Exception:
         print("Building fixation maps…")
         FixMaps = CreateFixationMaps_from_df(fixations, ppd)
-
         with open(cache_path, "wb") as f:
             pickle.dump({"meta": meta, "data": FixMaps}, f)
         print(f"Saved FixMaps → {cache_path}")
-
     print(f"Ready: {len(FixMaps)} images in FixMaps.")
 
     # --- NSS calculation ---
@@ -594,31 +591,23 @@ if __name__ == "__main__":
                           tag="calculate_NSS_similarity:v2_disk_at_fix",
                           extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS)})
 
+    # Open NSS cache, if meta matches, otherwise force recomputation
     try:
         with open(nss_cache_path, "rb") as f:
             nss_cache = pickle.load(f)
 
-        # Case A: new-format cache with meta+data
+        # If meta data matches, load results
         if isinstance(nss_cache, dict) and "meta" in nss_cache and "data" in nss_cache:
             if nss_cache["meta"] == nss_meta:
                 NSSResults = nss_cache["data"]
                 print(f"Loaded NSSResults from cache → {nss_cache_path}")
             else:
-                # helpful diff to explain recompute
+                # if parts of meta mismatch, print diffs for debugging
                 diffs = {k: (nss_cache['meta'].get(k), nss_meta.get(k))
                         for k in sorted(set(nss_cache['meta']) | set(nss_meta))
                         if nss_cache['meta'].get(k) != nss_meta.get(k)}
                 print("[NSS cache] meta mismatch → recomputing. Diffs:", diffs)
                 raise ValueError("meta mismatch")
-
-        # Case B: legacy file: treat whole object as results
-        elif isinstance(nss_cache, dict) and "image" in nss_cache and "meanNSSSimilarityPerImage" in nss_cache:
-            NSSResults = nss_cache
-            print(f"Loaded legacy NSSResults (no meta) → {nss_cache_path}")
-
-        else:
-            print("[NSS cache] Unrecognized format → recomputing.")
-            raise ValueError("unrecognized cache format")
 
     except Exception:
         print("Computing NSS similarity (LOSO, disk radius = sigma)...")
