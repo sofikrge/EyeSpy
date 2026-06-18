@@ -736,6 +736,7 @@ if __name__ == "__main__":
                     'NSS_Scrambled': subj['NSS_scrambled'],
                     'Awareness': img_data['awareness'],
                     'Trial': subj['ParticipantID'].split('_t')[1],
+                    'NSS_Disamb_Eccentricity': disamb_lookup.get((subj['ParticipantID'].split('_t')[0], image_name, session), np.nan),
                 })
 
     # convert to pandas
@@ -756,11 +757,6 @@ if __name__ == "__main__":
     )
     # Clean the names 
     df_long_fully_melted['ReferenceMap'] = df_long_fully_melted['ReferenceMap'].str.replace('NSS_', '')
-
-    df_long_fully_melted['NSS_Corrected'] = df_long_fully_melted.apply(
-        lambda r: r['NSS'] - disamb_lookup.get((r['Participant'], r['Image'], r['Session']), np.nan),
-        axis=1
-    )
 
     cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
     df_long_fully_melted.to_csv(cross_long_path, index=False)
