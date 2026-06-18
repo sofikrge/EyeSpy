@@ -136,7 +136,7 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
 
     return FixMaps
 
-#%% === NSS like Shaked's Matlab ===
+#%% === NSS Helpers ===
 def _disk_offsets(radius_px: float) -> tuple[np.ndarray, np.ndarray]:
     """Creates circle mask to later identify which fix fall within radius"""
     r = int(np.ceil(float(radius_px)))   # ← ceil instead of floor
@@ -193,7 +193,7 @@ def _group_fixations_for_image(fixations_df: pd.DataFrame, img: Any, cond: Any, 
         "ImageName == @img and session == @cond and image_type == @img_type")
 
 def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H: int, W: int):
-    """Return list of (h1,w1) per subject, ordered by participant (as string)."""
+    """Return list of (h1,w1) per subject, ordered by participant to match FixMaps"""
     coords = []
     if df_group.empty:
         return coords
@@ -224,7 +224,7 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
     return coords
 
 def _stack_subject_maps(subjects: list[dict], H: int, W: int) -> np.ndarray:
-    """Stack per-subject hit maps into [n, H, W] float32 array (supports compressed)."""
+    """Reconstructs compressed subject maps into a 3D array (n_subjects, H, W)"""
     if not subjects:
         return np.zeros((0, H, W), dtype=np.float32)
 
@@ -243,7 +243,7 @@ def _stack_subject_maps(subjects: list[dict], H: int, W: int) -> np.ndarray:
     return out
 
 def _blur_subject_maps(maps: np.ndarray, sigma: float) -> tuple[np.ndarray, np.ndarray]:
-    """Gaussian blur all subjects at once, return (blurred[n,H,W], sum_blur[H,W])."""
+    """Gaussian blur all subjects at once, return (blurredblurred maps + combined sum map"""
     if maps.size == 0:
         return maps, np.zeros(maps.shape[1:], dtype=np.float32)
     blurred = gaussian_filter(maps, sigma=(0.0, sigma, sigma), mode="reflect", truncate=2.0)
@@ -251,12 +251,12 @@ def _blur_subject_maps(maps: np.ndarray, sigma: float) -> tuple[np.ndarray, np.n
     return blurred, sum_blur
 
 def _compute_loso(sum_blur: np.ndarray, blurred: np.ndarray, j: int) -> np.ndarray:
-    """Leave-one-subject-out average map for subject j."""
+    """Leave-one-subject-out average map for subject j"""
     n = blurred.shape[0]
-    return (sum_blur - blurred[j]) / float(max(n - 1, 1))
+    return (sum_blur - blurred[j]) / float(max(n - 1, 1)) # take out chosen p and average
 
 def _z_normalize(arr: np.ndarray) -> tuple[np.ndarray | None, float, float]:
-    """Population z-normalization (ddof=0). Returns (zmap or None if degenerate, mu, sd)."""
+    """Convert LOSO map into standardised z score map"""
     mu = float(arr.mean())
     sd = float(arr.std(ddof=DISPERSION_DDOF))
     if sd == 0.0 or not np.isfinite(sd):
@@ -265,20 +265,22 @@ def _z_normalize(arr: np.ndarray) -> tuple[np.ndarray | None, float, float]:
 
 def _nss_for_subject(zmap: np.ndarray | None,coords_j: tuple[np.ndarray, np.ndarray] | None,dy_off: np.ndarray,dx_off: np.ndarray,) -> float:
     """Compute NSS for one subject given zmap and that subject's fixation coords."""
-    if zmap is None or coords_j is None:
+    if zmap is None or coords_j is None: # if no ref map
         return float(np.nan)
     h1, w1 = coords_j
-    if h1.size == 0:
+    if h1.size == 0: # if map empty
         return float(np.nan)
-    r0, c0 = (h1 - 1), (w1 - 1)  # to 0-based
-    per_fix_means = _disk_means_at_points(zmap, r0, c0, dy_off, dx_off)
-    return float(np.nanmean(per_fix_means))
+    r0, c0 = (h1 - 1), (w1 - 1)  # to 0-based to make compatible with python memory array
+    per_fix_means = _disk_means_at_points(zmap, r0, c0, dy_off, dx_off) # extracting saliency values across disk stencil
+    return float(np.nanmean(per_fix_means)) # aggregatre as mean
 
 def _aggregate_image_scores(subj_scores: list[float]) -> float:
+    """Aggregate NSS scores across subjects for one image."""
     arr = np.asarray(subj_scores, dtype=float)
     return float(np.nanmean(arr)) if np.isfinite(arr).any() else float("nan")
 
 def _update_global_stats(per_image_means: np.ndarray) -> tuple[float, float, float]:
+    """Compute mean, std, and ste across images."""
     arr = np.asarray(per_image_means, dtype=float)
     if not np.isfinite(arr).any():
         return float("nan"), float("nan"), float("nan")
@@ -287,19 +289,25 @@ def _update_global_stats(per_image_means: np.ndarray) -> tuple[float, float, flo
     ste_  = float(std_ / np.sqrt(np.isfinite(arr).sum()))
     return mean_, std_, ste_
 
-def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegree: float,*,min_subj_per_image_nss: int = 2,
+#%% === NSS within-phase ===
+
+def calculate_WithinPhase_NSS(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegree: float,*,min_subj_per_image_nss: int = 2,
     image_height: int = IMAGE_HEIGHT,image_width: int = IMAGE_WIDTH):
     """
-    Same MATLAB logic as before, just decomposed into small helpers.
+    Within phase NSS 
+    Uses above helpers to compute NSS similarity for each image in FixMaps against the corresponding fixations in fixations_df
     """
+
     H, W = int(image_height), int(image_width)
     _validate_nss_inputs(fixations_df)
 
     sigma = SIGMA
-    dy_off, dx_off = _disk_offsets(sigma)
+    dy_off, dx_off = _disk_offsets(sigma) # generate disk stencil
 
     Results = {"image": [], "meanNSSSimilarityPerImage": [],
                "meanNSSSimilarity": np.nan, "stdNSSSimilarity": np.nan, "steNSSSimilarity": np.nan}
+
+    drop_stats = {"total_dropped": 0, "insufficient_subjects": 0}
 
     per_image_means = []
 
@@ -311,24 +319,28 @@ def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegr
         out = {"img": img, "condition": cond, "image_type": img_type, "subject": []}
 
         if n >= int(min_subj_per_image_nss):
+            # First create ref maps
             maps = _stack_subject_maps(subjects, H, W)
             blurred, sum_blur = _blur_subject_maps(maps, sigma)
 
             df_group = _group_fixations_for_image(fixations_df, img, cond, img_type)
-            # --- SURGICAL ADDITION: Get Participant IDs ---
+
             participant_ids = sorted(df_group["participant"].astype(str).unique())
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
 
             subj_scores = []
-            for j in range(n):
+            for j in range(n): 
+                # then LOSO logic -> saliency map without participant j
                 loso = _compute_loso(sum_blur, blurred, j)
                 zmap, _, _ = _z_normalize(loso)
+
+                # Scoring
                 coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
                 nss_j = _nss_for_subject(zmap, coords_j, dy_off, dx_off)
                 out["subject"].append({
                     "subjNum": subjects[j].get("subjNum", j + 1),
                     "ParticipantID": participant_ids[j], 
-                    "NSSSimPerSubj": nss_j
+                    "NSSSimPerSubj": nss_j # final score of that participant for that image 
                 })
                 subj_scores.append(nss_j)
 
@@ -337,6 +349,8 @@ def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegr
             Results["meanNSSSimilarityPerImage"].append(img_mean)
             per_image_means.append(img_mean)
         else:
+            drop_stats["total_dropped"] += 1
+            drop_stats["insufficient_subjects"] += 1
             Results["image"].append(out)
             Results["meanNSSSimilarityPerImage"].append(np.nan)
             per_image_means.append(np.nan)
@@ -347,6 +361,10 @@ def calculate_NSS_similarity(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegr
     Results["stdNSSSimilarity"]  = std_
     Results["steNSSSimilarity"]  = ste_
 
+    if drop_stats["total_dropped"] > 0:
+        print(f"📊 [Diagnostic] Dropped {drop_stats['total_dropped']} images: "
+              f"{drop_stats['insufficient_subjects']} due to subject count threshold.")
+        
     return Results
 
 #%% === NSS cross-phase ===
@@ -361,7 +379,9 @@ def _index_fixmaps(FixMaps):
 
 def _aggregate_by_policy(subj_scores: list[float], policy: str) -> float:
     """
-    policy: "permissive" -> np.nanmean; "matlab_strict" -> NaN if any NaN present.
+    controls how script handles missing or incomplete data
+    permissive means it ingores NaNs and averages whatever valid data is present (e.g. if only intact ref exists, it uses that)
+    matlab_strict means it follows the more conservative approach of requiring both references to be present and valid, otherwise returning NaN for that image
     """
     arr = np.asarray(subj_scores, dtype=float)
     if policy == "matlab_strict":
@@ -370,84 +390,63 @@ def _aggregate_by_policy(subj_scores: list[float], policy: str) -> float:
     return float(np.nanmean(arr)) if np.isfinite(arr).any() else float("nan")
 
 def calculate_NSS_crossphase(
-    FixMaps,
-    fixations_df: pd.DataFrame,
-    pixels_per_vdegree: float,
-    *,
-    image_height: int = IMAGE_HEIGHT,
-    image_width: int = IMAGE_WIDTH,
-    nan_policy: str = "permissive",   # or "matlab_strict"
-    min_subj_per_image_cross: int = 2, 
-):
+    FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegree: float,
+    *,image_height: int = IMAGE_HEIGHT,image_width: int = IMAGE_WIDTH,
+    nan_policy: str = "permissive", min_subj_per_image_cross: int = 2):
     """
     For each Mooney image × condition, compute NSS of Mooney fixations
     against two reference saliency maps from the disambiguation phase:
       - disamb_intact
       - disamb_not_intact (scrambled)
-    Reuses existing helpers and mirrors your NSS choices:
-      - sigma = pixels_per_vdegree / 2
-      - disk radius = sigma (via _disk_offsets)
-      - z-normalization with population std (ddof=0)
     """
+
+    # verify data integrity
     H, W = int(image_height), int(image_width)
     _validate_nss_inputs(fixations_df)
 
+    # set up smoothing parameter and pre calculate disk offsets for later use in scoring
     sigma = SIGMA
     dy_off, dx_off = _disk_offsets(sigma)
 
     # Fast lookup for reference maps
     fm_index = _index_fixmaps(FixMaps)
 
-    # Count how many Mooney groups exist for sanity check
-    n_mi = sum(1 for fm in FixMaps if fm["image_type"]=="mooney_post_intact")
-    n_ms = sum(1 for fm in FixMaps if fm["image_type"]=="mooney_post_scrambled")
-    print(f"[cross] Mooney groups found: post_intact={n_mi}, post_scrambled={n_ms}")
-
-    # Collect per-image results (for summaries) and detailed per-image structures
+    # Collect per-image results
     per_image_records = []
     Results = {
-        "image": [],  # one entry per (img, condition) mooney group, with subject details
+        "image": [],
         "meanNSS_intact_per_image": [],
         "meanNSS_scrambled_per_image": [],
         "meanNSS_diff_per_image": [],
-        "summary_by_condition": [],  # filled at the end
+        "summary_by_condition": [], 
     }
 
-    # Iterate over Mooney groups only
+    # Iterate over Mooney groups only, keep only post-intact Mooney 
     for fm_mooney in FixMaps:
         img, cond, img_type = fm_mooney["img"], fm_mooney["condition"], fm_mooney["image_type"]
-        # Change from "mooney" to your new surgical label
         if img_type != "mooney_post_intact":
             continue
 
-        # Prepare Mooney subject fixation coordinates (ordered like subjects)
+        # fetch all fixations + slpit into groups depending on awarneess
         df_group_all = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
         awareness_groups = df_group_all.groupby("awareness")
-        print(f"[cross]   total fixations for img={img} cond={cond}: {len(df_group_all)}, unique participants: {df_group_all['participant'].nunique()}, unique trials: {df_group_all['trial_number'].nunique()}")
-
-        if DEBUG:
-            print(f"[cross] img={img} cond={cond} | awareness groups: {sorted(df_group_all['awareness'].unique())}")
-
+       
         for awareness_val, df_group in awareness_groups:
+
             expected_prefix = "conscious" if cond == "C" else "unconscious"
-            if not str(awareness_val).startswith(expected_prefix):
+            if not str(awareness_val).startswith(expected_prefix): #check for mismatch between condition and awareness
                 print(f"[cross] ⚠️ MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
-            participant_ids = sorted(
+            
+            participant_ids = sorted( # sort by psrticipant ID 
                 (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
                 key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
             )
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
-            print(f"[cross]   coords_list length (n trial-participant units): {len(coords_list)}, non-empty: {sum(1 for h,w in coords_list if len(h)>0)}")
             n_subj= len(coords_list)
 
-            # Debug print for awareness group
-            n_fix_raw = len(df_group)
-            n_fix_kept = sum(len(h) for h, w in coords_list)
-            print(f"[cross]   awareness={awareness_val}: n_subj={n_subj}, fixations raw={n_fix_raw}, kept_in_bounds={n_fix_kept}")
-
-            if n_subj< int(min_subj_per_image_cross):
+            if n_subj< int(min_subj_per_image_cross): # if subj copunt too low, adds nan placeholder
                 Results["image"].append({
-                    "img": img, "condition": cond, "image_type": "mooney", # Standardize output type
+                    "img": img, "condition": cond, "image_type": "mooney",
                     "subject": [],
                     "NSS_intact_img": float("nan"),
                     "NSS_scrambled_img": float("nan"),
@@ -467,20 +466,17 @@ def calculate_NSS_crossphase(
                 })
                 continue
 
-            # STRICT SESSION MATCHING: Use 'cond' (current session) to look up the reference
+            # retrieve ref maps
             fm_intact = fm_index.get((img, cond, "disamb_intact"))
             fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
-            
-            # Set helper vars so the debug prints below (lines 640+) don't crash
-            intact_session = cond if fm_intact else None
-            scrambled_session = cond if fm_scrambled else None
 
+            # validate existence of maps
             ref_maps = {
                 "intact":    fm_intact["fixMapPerIm"]    if fm_intact    and fm_intact.get("fixMapPerIm", None)    is not None and len(np.shape(fm_intact["fixMapPerIm"])) == 2 else None,
                 "scrambled": fm_scrambled["fixMapPerIm"] if fm_scrambled and fm_scrambled.get("fixMapPerIm", None) is not None and len(np.shape(fm_scrambled["fixMapPerIm"])) == 2 else None,
             }
 
-            # Z-normalize references (population std); if std==0 or non-finite => zmap=None (treated as NaN NSS)
+            # Z-normalize references 
             zrefs = {}
             for k, ref in ref_maps.items():
                 if ref is None:
@@ -488,16 +484,6 @@ def calculate_NSS_crossphase(
                 else:
                     zref, mu, sd = _z_normalize(np.asarray(ref, dtype=float))
                     zrefs[k] = zref  # None if degenerate
-
-            # Optional but helpful diagnostics
-            if DEBUG:
-                for k in ['intact', 'scrambled']:
-                    if ref_maps[k] is None:
-                        print(f"[cross] ❌ ref '{k}' missing for img={img} cond={cond}")
-                    elif zrefs[k] is None:
-                        print(f"[cross] ⚠️  ref '{k}' degenerate (zero std) for img={img} cond={cond}")
-                    else:
-                        print(f"[cross] ✓ ref '{k}' ready: mean={ref_maps[k].mean():.4f}, std={ref_maps[k].std():.4f}, nonzero_px={np.count_nonzero(ref_maps[k])}")
 
             # Per-subject NSS for each reference
             subj_out = []
@@ -524,19 +510,14 @@ def calculate_NSS_crossphase(
                 })
 
                 subj_scores_intact.append(nss_intact)
-                if DEBUG:
-                    print(f"[cross]     trial_unit j={j} pid={participant_ids[j]}: NSS_intact={nss_intact:.4f}, NSS_scrambled={nss_scram:.4f}")
                 subj_scores_scrambled.append(nss_scram)
 
-            # Per-image aggregation (policy-controlled)
+            # Per-image aggregation, basedo n defined policy above
             img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
             img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
             img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
 
-            if DEBUG:
-                print(f"[cross]   img_agg img={img} cond={cond} awareness={awareness_val}: intact={img_nss_intact:.4f}, scrambled={img_nss_scrambled:.4f}, diff={img_nss_diff:.4f}")
-
-            # Store detailed record and flat record
+            # Store results
             Results["image"].append({
                 "img": img,
                 "condition": cond,
@@ -600,6 +581,7 @@ if __name__ == "__main__":
     except Exception:
         print("Building fixation maps…")
         FixMaps = CreateFixationMaps_from_df(fixations, ppd)
+
         with open(cache_path, "wb") as f:
             pickle.dump({"meta": meta, "data": FixMaps}, f)
         print(f"Saved FixMaps → {cache_path}")
@@ -640,7 +622,7 @@ if __name__ == "__main__":
 
     except Exception:
         print("Computing NSS similarity (LOSO, disk radius = sigma)...")
-        NSSResults = calculate_NSS_similarity(
+        NSSResults = calculate_WithinPhase_NSS(
             FixMaps=FixMaps,fixations_df=fixations,
             pixels_per_vdegree=ppd,min_subj_per_image_nss=int(MIN_SUBJ_PER_IMAGE_NSS),
             image_height=IMAGE_HEIGHT,image_width=IMAGE_WIDTH)
