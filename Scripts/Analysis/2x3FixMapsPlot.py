@@ -47,7 +47,7 @@ FIGURE_SIZE = (18, 11)
 DPI = 150
 HEATMAP_COLORMAP = "jet"
 HEATMAP_ALPHA = 0.6
-HEATMAP_THRESHOLD = 0  # Minimum density to show (0 = show all)
+HEATMAP_THRESHOLD = 0.05  # Minimum density to show (0 = show all)
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -196,6 +196,13 @@ def create_visualization(rank, image_name, score, fixation_maps, fixations_df):
     intact_bg = find_image_file(image_name, DISAMB_DIRS)
     scrambled_bg = scramble_image(intact_bg) if intact_bg else None
     
+    # Calculate true image pixel dimensions and padding for 800x600 canvas
+    img_px_w = 9.99 * MASK_PPD
+    img_px_h = 7.50 * MASK_PPD
+    x_pad = (IMAGE_WIDTH - img_px_w) / 2
+    y_pad = (IMAGE_HEIGHT - img_px_h) / 2
+    img_extent = [x_pad, IMAGE_WIDTH - x_pad, IMAGE_HEIGHT - y_pad, y_pad]
+    
     fig, axes = plt.subplots(3, 3, figsize=FIGURE_SIZE)
     
     rows = [
@@ -219,9 +226,9 @@ def create_visualization(rank, image_name, score, fixation_maps, fixations_df):
                 if isinstance(background, (str, Path)):
                     img = mpimg.imread(background)
                     cmap = 'gray' if 'mooney' in img_type else None
-                    ax.imshow(img, origin='upper', cmap=cmap)
+                    ax.imshow(img, origin='upper', cmap=cmap, extent=img_extent)
                 else:
-                    ax.imshow(background, origin='upper')
+                    ax.imshow(background, origin='upper', extent=img_extent)
             
             # Overlay heatmap
             if img_type == "mooney":
