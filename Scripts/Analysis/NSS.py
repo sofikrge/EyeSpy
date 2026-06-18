@@ -21,13 +21,11 @@ IMAGE_WIDTH         = 800
 DEBUG               = True
 
 MASK_PPD            = 48.55 
-SIGMA               = MASK_PPD / 2.0 # Pixels per visual degree / 2
+SIGMA               = MASK_PPD / 2.0 # blurring radius 
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
-# NaN Policy for Cross-Phase NSS:
-# - "permissive": Use Intact OR Scrambled reference (whichever exists)
-# - "matlab_strict": Require BOTH references (drop image if either missing)
+
 NAN_POLICY_CROSS         = "permissive"  # or "matlab_strict"
 
 DISPERSION_DDOF = 0   # 0 = population sd (spread of present data); set to 1 for sample sd
@@ -744,5 +742,5 @@ if __name__ == "__main__":
 
     cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
     df_long_fully_melted.to_csv(cross_long_path, index=False)
-    
+
     print(f"✅ Saved Cross-Phase LONG Dataset to: {cross_long_path}")
