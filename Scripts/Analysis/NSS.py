@@ -84,7 +84,6 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
     for (img_name, cond, img_type), df_img in (
         df.sort_values(group_cols + ["participant"]).groupby(group_cols, dropna=False)
     ):
-        if img_type == "mooney_post_scrambled": continue  # skip scrambled Mooney as we won't analyze it directly
         entry = {"img": img_name, "condition": cond, "image_type": img_type}
 
         subj_maps = []
@@ -314,14 +313,18 @@ def calculate_WithinPhase_NSS(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdeg
         subjects = fm.get("subject", [])
         n = len(subjects)
 
-        out = {"img": img, "condition": cond, "image_type": img_type, "subject": []}
+        base_type = "mooney_post_intact" if img_type.startswith("mooney_post_intact") else "mooney_post_scrambled" if img_type.startswith("mooney_post_scrambled") else img_type
+        awareness_val = img_type[len(base_type)+1:] if img_type != base_type else None
+        out = {"img": img, "condition": cond, "image_type": img_type, "subject": [], "awareness": awareness_val}
 
         if n >= int(min_subj_per_image_nss):
             # First create ref maps
             maps = _stack_subject_maps(subjects, H, W)
             blurred, sum_blur = _blur_subject_maps(maps, sigma)
 
-            df_group = _group_fixations_for_image(fixations_df, img, cond, img_type)
+            df_group = _group_fixations_for_image(fixations_df, img, cond, base_type)
+            if awareness_val:
+                df_group = df_group[df_group["awareness"] == awareness_val]
 
             participant_ids = sorted(df_group["participant"].astype(str).unique())
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
@@ -422,124 +425,123 @@ def calculate_NSS_crossphase(
     # Iterate over Mooney groups only, keep only post-intact Mooney 
     for fm_mooney in FixMaps:
         img, cond, img_type = fm_mooney["img"], fm_mooney["condition"], fm_mooney["image_type"]
-        if img_type != "mooney_post_intact":
+        if not img_type.startswith("mooney_post_intact_"):
             continue
 
-        # fetch all fixations + slpit into groups depending on awarneess
-        df_group_all = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
-        awareness_groups = df_group_all.groupby("awareness")
+        # fetch all fixations + derive awareness value from image_type
+        awareness_val = img_type.split("mooney_post_intact_")[1]  # e.g. "conscious_aware"
+        df_group = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
+        df_group = df_group[df_group["awareness"] == awareness_val]
        
-        for awareness_val, df_group in awareness_groups:
+        expected_prefix = "conscious" if cond == "C" else "unconscious"
+        if not str(awareness_val).startswith(expected_prefix): #check for mismatch between condition and awareness
+            print(f"[cross] ⚠️ MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
+        
+        participant_ids = sorted( # sort by psrticipant ID 
+            (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
+            key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
+        )
+        coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+        n_subj= len(coords_list)
 
-            expected_prefix = "conscious" if cond == "C" else "unconscious"
-            if not str(awareness_val).startswith(expected_prefix): #check for mismatch between condition and awareness
-                print(f"[cross] ⚠️ MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
-            
-            participant_ids = sorted( # sort by psrticipant ID 
-                (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
-                key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
-            )
-            coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
-            n_subj= len(coords_list)
-
-            if n_subj< int(min_subj_per_image_cross): # if subj copunt too low, adds nan placeholder
-                Results["image"].append({
-                    "img": img, "condition": cond, "image_type": "mooney",
-                    "subject": [],
-                    "NSS_intact_img": float("nan"),
-                    "NSS_scrambled_img": float("nan"),
-                    "NSS_diff_img": float("nan"),
-                    "awareness": awareness_val,
-                })
-                Results["meanNSS_intact_per_image"].append(float("nan"))
-                Results["meanNSS_scrambled_per_image"].append(float("nan"))
-                Results["meanNSS_diff_per_image"].append(float("nan"))
-                per_image_records.append({
-                    "img": img, "condition": cond,
-                    "NSS_intact_img": float("nan"),
-                    "NSS_scrambled_img": float("nan"),
-                    "NSS_diff_img": float("nan"),
-                    "n_subjects": int(n_subj),
-                    "awareness": awareness_val,
-                })
-                continue
-
-            # retrieve ref maps
-            fm_intact = fm_index.get((img, cond, "disamb_intact"))
-            fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
-
-            # validate existence of maps
-            ref_maps = {
-                "intact":    fm_intact["fixMapPerIm"]    if fm_intact    and fm_intact.get("fixMapPerIm", None)    is not None and len(np.shape(fm_intact["fixMapPerIm"])) == 2 else None,
-                "scrambled": fm_scrambled["fixMapPerIm"] if fm_scrambled and fm_scrambled.get("fixMapPerIm", None) is not None and len(np.shape(fm_scrambled["fixMapPerIm"])) == 2 else None,
-            }
-
-            # Z-normalize references 
-            zrefs = {}
-            for k, ref in ref_maps.items():
-                if ref is None:
-                    zrefs[k] = None
-                else:
-                    zref, mu, sd = _z_normalize(np.asarray(ref, dtype=float))
-                    zrefs[k] = zref  # None if degenerate
-
-            # Per-subject NSS for each reference
-            subj_out = []
-            subj_scores_intact = []
-            subj_scores_scrambled = []
-
-            for j in range(n_subj):
-                coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
-
-                nss_intact = _nss_for_subject(zrefs["intact"], coords_j, dy_off, dx_off)
-                nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
-                nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
-
-                mooney_subjects = fm_mooney.get("subject", [])
-                subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
-
-                subj_out.append({
-                    "subjNum": subjnum, 
-                    "ParticipantID": participant_ids[j],  # <--- ADD THIS
-                    "NSS_intact": nss_intact, 
-                    "NSS_scrambled": nss_scram, 
-                    "NSS_diff": nss_diff,
-                    "awareness": awareness_val,
-                })
-
-                subj_scores_intact.append(nss_intact)
-                subj_scores_scrambled.append(nss_scram)
-
-            # Per-image aggregation, basedo n defined policy above
-            img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
-            img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
-            img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
-
-            # Store results
+        if n_subj< int(min_subj_per_image_cross): # if subj copunt too low, adds nan placeholder
             Results["image"].append({
-                "img": img,
-                "condition": cond,
-                "image_type": "mooney", # Standardize output type for cross-phase results
-                "subject": subj_out,
-                "NSS_intact_img": img_nss_intact,
-                "NSS_scrambled_img": img_nss_scrambled,
-                "NSS_diff_img": img_nss_diff,
+                "img": img, "condition": cond, "image_type": "mooney",
+                "subject": [],
+                "NSS_intact_img": float("nan"),
+                "NSS_scrambled_img": float("nan"),
+                "NSS_diff_img": float("nan"),
                 "awareness": awareness_val,
             })
-
-            Results["meanNSS_intact_per_image"].append(img_nss_intact)
-            Results["meanNSS_scrambled_per_image"].append(img_nss_scrambled)
-            Results["meanNSS_diff_per_image"].append(img_nss_diff)
-
+            Results["meanNSS_intact_per_image"].append(float("nan"))
+            Results["meanNSS_scrambled_per_image"].append(float("nan"))
+            Results["meanNSS_diff_per_image"].append(float("nan"))
             per_image_records.append({
-                "img": img,
-                "condition": cond,
-                "NSS_intact_img": img_nss_intact,
-                "NSS_scrambled_img": img_nss_scrambled,
-                "NSS_diff_img": img_nss_diff,
+                "img": img, "condition": cond,
+                "NSS_intact_img": float("nan"),
+                "NSS_scrambled_img": float("nan"),
+                "NSS_diff_img": float("nan"),
                 "n_subjects": int(n_subj),
                 "awareness": awareness_val,
             })
+            continue
+
+        # retrieve ref maps
+        fm_intact = fm_index.get((img, cond, "disamb_intact"))
+        fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
+
+        # validate existence of maps
+        ref_maps = {
+            "intact":    fm_intact["fixMapPerIm"]    if fm_intact    and fm_intact.get("fixMapPerIm", None)    is not None and len(np.shape(fm_intact["fixMapPerIm"])) == 2 else None,
+            "scrambled": fm_scrambled["fixMapPerIm"] if fm_scrambled and fm_scrambled.get("fixMapPerIm", None) is not None and len(np.shape(fm_scrambled["fixMapPerIm"])) == 2 else None,
+        }
+
+        # Z-normalize references 
+        zrefs = {}
+        for k, ref in ref_maps.items():
+            if ref is None:
+                zrefs[k] = None
+            else:
+                zref, mu, sd = _z_normalize(np.asarray(ref, dtype=float))
+                zrefs[k] = zref  # None if degenerate
+
+        # Per-subject NSS for each reference
+        subj_out = []
+        subj_scores_intact = []
+        subj_scores_scrambled = []
+
+        for j in range(n_subj):
+            coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
+
+            nss_intact = _nss_for_subject(zrefs["intact"], coords_j, dy_off, dx_off)
+            nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
+            nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
+
+            mooney_subjects = fm_mooney.get("subject", [])
+            subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
+
+            subj_out.append({
+                "subjNum": subjnum, 
+                "ParticipantID": participant_ids[j],  # <--- ADD THIS
+                "NSS_intact": nss_intact, 
+                "NSS_scrambled": nss_scram, 
+                "NSS_diff": nss_diff,
+                "awareness": awareness_val,
+            })
+
+            subj_scores_intact.append(nss_intact)
+            subj_scores_scrambled.append(nss_scram)
+
+        # Per-image aggregation, basedo n defined policy above
+        img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
+        img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
+        img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
+
+        # Store results
+        Results["image"].append({
+            "img": img,
+            "condition": cond,
+            "image_type": "mooney", # Standardize output type for cross-phase results
+            "subject": subj_out,
+            "NSS_intact_img": img_nss_intact,
+            "NSS_scrambled_img": img_nss_scrambled,
+            "NSS_diff_img": img_nss_diff,
+            "awareness": awareness_val,
+        })
+
+        Results["meanNSS_intact_per_image"].append(img_nss_intact)
+        Results["meanNSS_scrambled_per_image"].append(img_nss_scrambled)
+        Results["meanNSS_diff_per_image"].append(img_nss_diff)
+
+        per_image_records.append({
+            "img": img,
+            "condition": cond,
+            "NSS_intact_img": img_nss_intact,
+            "NSS_scrambled_img": img_nss_scrambled,
+            "NSS_diff_img": img_nss_diff,
+            "n_subjects": int(n_subj),
+            "awareness": awareness_val,
+        })
 
     n_total = len(Results["image"])
     n_valid_i = sum(np.isfinite(r["NSS_intact_img"]) for r in Results["image"])
@@ -564,7 +566,7 @@ if __name__ == "__main__":
     fixations = load_fixations()
     ppd = MASK_PPD 
     cache_path = OUTPUT_DIR / "FixMaps_full.pkl"
-    meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v2")
+    meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v3_awareness_split")
 
     # Open Fixmaps (heatmaps) cache
     try: # attempt to open cache file, if meta matches, otherwise force recomputation
@@ -577,7 +579,14 @@ if __name__ == "__main__":
             raise ValueError("cache params changed")
     except Exception:
         print("Building fixation maps…")
-        FixMaps = CreateFixationMaps_from_df(fixations, ppd)
+
+        # Split fixations into disambiguation and mooney groups, then create fixation maps for each
+        df_disamb = fixations[fixations["image_type"].isin(["disamb_intact", "disamb_not_intact"])]
+        df_mooney = fixations[fixations["image_type"].isin(["mooney_post_intact", "mooney_post_scrambled"])]
+        FixMaps_disamb = CreateFixationMaps_from_df(df_disamb, ppd)
+        FixMaps_mooney = CreateFixationMaps_from_df(df_mooney.assign(image_type=df_mooney["image_type"] + "_" + df_mooney["awareness"]), ppd)
+        FixMaps = FixMaps_disamb + FixMaps_mooney
+
         with open(cache_path, "wb") as f:
             pickle.dump({"meta": meta, "data": FixMaps}, f)
         print(f"Saved FixMaps → {cache_path}")
@@ -586,7 +595,7 @@ if __name__ == "__main__":
     # --- Within Phase NSS calculation ---
     nss_cache_path = OUTPUT_DIR / "NSS_WithinPhase.pkl"
     nss_meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"),
-                          tag="calculate_NSS_similarity:v2_disk_at_fix",
+                          tag="calculate_NSS_similarity:v3_awareness_split",
                           extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS)})
 
     # Open NSS cache, if meta matches, otherwise force recomputation
@@ -689,8 +698,9 @@ if __name__ == "__main__":
                     'Participant': subj['ParticipantID'],
                     'Image': image_name,
                     'Session': session,
-                    'ImageType': img_type,
-                    'NSS': subj['NSSSimPerSubj']
+                    'ImageType': img_type.split("_conscious")[0].split("_unconscious")[0],
+                    'NSS': subj['NSSSimPerSubj'],
+                    'Awareness': img_data.get('awareness', None),
                 })
 
     if w_flat: # convert to pandas dataframe
