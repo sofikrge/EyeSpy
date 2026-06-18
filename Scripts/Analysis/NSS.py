@@ -585,7 +585,7 @@ if __name__ == "__main__":
         print(f"Saved FixMaps → {cache_path}")
     print(f"Ready: {len(FixMaps)} images in FixMaps.")
 
-    # --- NSS calculation ---
+    # --- Within Phase NSS calculation ---
     nss_cache_path = OUTPUT_DIR / "NSS_WithinPhase.pkl"
     nss_meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"),
                           tag="calculate_NSS_similarity:v2_disk_at_fix",
@@ -609,30 +609,33 @@ if __name__ == "__main__":
                 print("[NSS cache] meta mismatch → recomputing. Diffs:", diffs)
                 raise ValueError("meta mismatch")
 
-    except Exception:
+    except Exception: # compute NSS if any issue with cache loading or meta mismatch
         print("Computing NSS similarity (LOSO, disk radius = sigma)...")
         NSSResults = calculate_WithinPhase_NSS(
             FixMaps=FixMaps,fixations_df=fixations,
             pixels_per_vdegree=ppd,min_subj_per_image_nss=int(MIN_SUBJ_PER_IMAGE_NSS),
             image_height=IMAGE_HEIGHT,image_width=IMAGE_WIDTH)
+        # Write new NSS cache
         with open(nss_cache_path, "wb") as f:
             pickle.dump({"meta": nss_meta, "data": NSSResults}, f, protocol=pickle.HIGHEST_PROTOCOL)
         print(f"Saved NSSResults → {nss_cache_path}")
 
-
-    kept = [m for m in NSSResults["meanNSSSimilarityPerImage"] if np.isfinite(m)]
+    # sanity check and quick report of NSS results
+    kept = [m for m in NSSResults["meanNSSSimilarityPerImage"] if np.isfinite(m)] # filter out dropped images (NaN) for reporting
     print(f"NSS images kept: {len(kept)} / {len(NSSResults['meanNSSSimilarityPerImage'])}")
     print(f"NSS mean = {NSSResults['meanNSSSimilarity']:.4f}, "
           f"std = {NSSResults['stdNSSSimilarity']:.4f}, "
           f"ste = {NSSResults['steNSSSimilarity']:.4f}")
     
     # --- NSS cross-phase calculation ---
+    # cache setup for cross-phase
     cross_cache_path = OUTPUT_DIR / "NSS_crossphase_descriptives.pkl"
     cross_meta  = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition"),
                           tag="calculate_NSS_crossphase:v2_cross_session",  # ← Changed version tag
                           extra={"nan_policy": str(NAN_POLICY_CROSS),
                                  "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS)})
-
+    
+    # try loading cache
     try:
         with open(cross_cache_path, "rb") as f:
             cross_cache = pickle.load(f)
@@ -644,19 +647,17 @@ if __name__ == "__main__":
     except Exception:
         print("Computing Cross-phase NSS (Mooney vs Intact/Scrambled)...")
         CrossResults = calculate_NSS_crossphase(
-            FixMaps=FixMaps,
-            fixations_df=fixations,
+            FixMaps=FixMaps,fixations_df=fixations,
             pixels_per_vdegree=ppd,
-            image_height=IMAGE_HEIGHT,
-            image_width=IMAGE_WIDTH,
+            image_height=IMAGE_HEIGHT,image_width=IMAGE_WIDTH,
             nan_policy=str(NAN_POLICY_CROSS),
-            min_subj_per_image_cross=int(MIN_SUBJ_PER_IMAGE_CROSS),
-        )
+            min_subj_per_image_cross=int(MIN_SUBJ_PER_IMAGE_CROSS))
+        # save results + cache
         with open(cross_cache_path, "wb") as f:
             pickle.dump({"meta": cross_meta, "data": CrossResults}, f, protocol=pickle.HIGHEST_PROTOCOL)
         print(f"Saved Cross-phase NSS → {cross_cache_path}")
 
-    # Cross-phase quick report
+    # Diagnostics 
     intact_vals    = np.asarray(CrossResults["meanNSS_intact_per_image"], dtype=float)
     scrambled_vals = np.asarray(CrossResults["meanNSS_scrambled_per_image"], dtype=float)
     diff_vals      = np.asarray(CrossResults["meanNSS_diff_per_image"], dtype=float)
@@ -674,20 +675,16 @@ if __name__ == "__main__":
         print(f"Cross Diff:     mean={np.nanmean(diff_vals):.4f}")
 
     # ==========================================
-    # === JAMOVI EXPORT: WITHIN-PHASE (2x3) ===
+    # CSV EXPORT WITHIN PHASE NSS
     # ==========================================
-    print("\n📦 Creating Within-Phase Dataset for Jamovi (2x3 Design)...")
+    print("\n   Creating Within-Phase Dataset for Jamovi...")
     
-    # 1. Flatten the NSSResults
+    # Flatten the NSSResults
     w_flat = []
     for img_data in NSSResults['image']:
-        # ERROR WAS HERE: We do NOT filter out Mooney anymore. 
-        # We want ALL 3 types: mooney, disamb_intact, disamb_not_intact
-        
         img_type = img_data['image_type'] 
         session  = img_data['condition']  # "C" or "U"
         image_name = img_data['img']
-        
         for subj in img_data['subject']:
             if 'ParticipantID' in subj:
                 w_flat.append({
@@ -698,26 +695,24 @@ if __name__ == "__main__":
                     'NSS': subj['NSSSimPerSubj']
                 })
 
-    if w_flat:
-        # 2. Convert to DataFrame and Aggregate
+    if w_flat: # convert to pandas dataframe
         df_w_long = pd.DataFrame(w_flat)
         long_csv_path = OUTPUT_DIR / "NSS_WithinPhase_LongFormat.csv"
         df_w_long.to_csv(long_csv_path, index=False)
-        print(f"✅ Saved Within-Phase LONG Dataset to: {long_csv_path}")
+        print(f"Saved Within-Phase LONG Dataset to: {long_csv_path}")
         
-    # === JAMOVI EXPORT: Cross Phase 2x2 ANOVA FORMAT ===
     # ==========================================
-    print("\n📦 Creating Participant-Level Dataset for Jamovi (Wide Format)...")
+    # CSV EXPORT CROSS PHASE NSS
+    # ==========================================
+    print("\n   Creating Participant-Level Dataset for Jamovi...")
 
-    # 1. Flatten the nested structure
-    # We extract every single subject score from every image
+    # Flatten
     flat_data = []
     for img_data in CrossResults['image']:
         session = img_data['condition'] # "C" or "U"
         image_name = img_data['img']
-        
         for subj in img_data['subject']:
-            if 'ParticipantID' in subj: # Only works if you did Step 1
+            if 'ParticipantID' in subj:
                 flat_data.append({
                     'Participant': subj['ParticipantID'].split('_t')[0],
                     'Image': image_name,
@@ -728,30 +723,26 @@ if __name__ == "__main__":
                     'Trial': subj['ParticipantID'].split('_t')[1],
                 })
 
-    # 2. Convert to DataFrame and Aggregate
-    # We average across all images for each person-session combo
+    # convert to pandas
     df_long = pd.DataFrame(flat_data)
 
-    # --- NEW SURGICAL ADDITION ---
+    # find median trial no + label first vs second half of experiment for later analysis
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
     df_long['Experiment_Half'] = df_long.groupby(['Participant', 'Session'])['Trial'].transform(
         lambda x: np.where(x <= x.median(), 'First_Half', 'Second_Half')
     )
 
-    # --- NEW: SAVE LONG FORMAT HERE ---
-    # Note: Cross-phase data is currently "wide" regarding Intact/Scrambled columns. 
-    # For LMM, you might want these melted into a single "NSS" column and a "Reference" column.
-    
-    # Let's melt it fully for you so it is perfectly ready for LMM
+    # Long format sasving
     df_long_fully_melted = df_long.melt(
         id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
     )
-    # Clean the names (remove "NSS_" prefix from ReferenceMap)
+    # Clean the names 
     df_long_fully_melted['ReferenceMap'] = df_long_fully_melted['ReferenceMap'].str.replace('NSS_', '')
 
     cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
     df_long_fully_melted.to_csv(cross_long_path, index=False)
+    
     print(f"✅ Saved Cross-Phase LONG Dataset to: {cross_long_path}")
