@@ -714,6 +714,13 @@ if __name__ == "__main__":
     # ==========================================
     print("\n   Creating Participant-Level Dataset for Jamovi...")
 
+    disamb_lookup = {}
+    for img_data in NSSResults['image']:
+        if img_data.get('image_type') == 'disamb_intact':
+            for subj in img_data['subject']:
+                if 'ParticipantID' in subj:
+                    disamb_lookup[(subj['ParticipantID'], img_data['img'], img_data['condition'])] = subj['NSSSimPerSubj']
+
     # Flatten
     flat_data = []
     for img_data in CrossResults['image']:
@@ -749,6 +756,11 @@ if __name__ == "__main__":
     )
     # Clean the names 
     df_long_fully_melted['ReferenceMap'] = df_long_fully_melted['ReferenceMap'].str.replace('NSS_', '')
+
+    df_long_fully_melted['NSS_Corrected'] = df_long_fully_melted.apply(
+        lambda r: r['NSS'] - disamb_lookup.get((r['Participant'], r['Image'], r['Session']), np.nan),
+        axis=1
+    )
 
     cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
     df_long_fully_melted.to_csv(cross_long_path, index=False)
