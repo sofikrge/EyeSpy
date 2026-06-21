@@ -45,17 +45,17 @@ IMAGE_SIZE_DEG = (9.99, 7.50)  # On-screen stimulus size (width, height) in degr
 
 # 3. Where the original background images are stored on your computer
 MOONEY_DIRS = [
-    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment Code/RUN_ME/Stimuli/ImageTrials_Experiment'),
-    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment Code/RUN_ME/Stimuli/ImageTrials_ExtraTrials')
+    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment_Code/RUN_ME/Stimuli/ImageTrials_Experiment'),
+    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment_Code/RUN_ME/Stimuli/ImageTrials_ExtraTrials')
 ]
 DISAMB_DIRS = [
-    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment Code/RUN_ME/Stimuli/ImageDisamb_Experiment'),
-    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment Code/RUN_ME/Stimuli/ImageDisamb_ExtraTrials')
+    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment_Code/RUN_ME/Stimuli/ImageDisamb_Experiment'),
+    Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment_Code/RUN_ME/Stimuli/ImageDisamb_ExtraTrials')
 ]
 
 # 4. Visual settings
 N_TOP = 40                # How many top-ranked images to plot
-FIGURE_SIZE = (28, 21)    # Width, Height of the final saved image
+FIGURE_SIZE = (25, 18)    # Width, Height of the final saved image
 DPI = 150
 HEATMAP_COLORMAP = "jet"  # Reference saliency map colors (blue=low, red=high)
 HEATMAP_ALPHA = 0.45      # Transparency of the reference map overlay
@@ -174,16 +174,20 @@ def build_score_lookup(results):
         )
     return lookup
 
-def get_mooney_fixation_points(fixations, image_name, session, awareness):
-    """Pixel coords (x, y) of the Mooney fixations for one image / session / awareness.
+def get_fixation_points(fixations, image_name, session, image_type, awareness=None):
+    """Pixel coords (x, y) of fixations for one image / session / image_type.
 
-    These are the SAME fixations the cross-phase NSS scores against the disamb maps."""
+    Mirrors how each panel's map is built:
+      • Mooney maps are awareness-split  → pass awareness to filter the group.
+      • Disambiguator maps are session-split, NOT awareness-split → leave awareness=None
+        (matches NSS.py reference maps and FixationDensityPlot)."""
     mask = (
         (fixations["ImageName"].astype(str) == str(image_name)) &
         (fixations["session"].astype(str).str.upper() == str(session).upper()) &
-        (fixations["image_type"] == "mooney_post_intact") &
-        (fixations["awareness"] == awareness)
+        (fixations["image_type"] == image_type)
     )
+    if awareness is not None:
+        mask &= (fixations["awareness"] == awareness)
     sub = fixations[mask]
     if sub.empty:
         return np.array([]), np.array([])
@@ -226,10 +230,23 @@ def _draw_fixations(ax, x_px, y_px):
                edgecolors='black', linewidths=0.4, alpha=FIX_POINT_ALPHA, zorder=5)
 
 def _panel_score(ax, value):
-    """Annotates a panel with its NSS score in the top-left corner."""
-    ax.text(0.02, 0.98, f"NSS = {value:.3f}", transform=ax.transAxes,
-            va='top', ha='left', fontsize=12, color='white',
-            bbox=dict(boxstyle='round', facecolor='black', alpha=0.55, pad=0.3), zorder=6)
+    """Labels a disambiguator panel with its cross-phase NSS score, centred just above it."""
+    ax.text(0.5, 0.9, f"Cross-Phase NSS = {value:.3f}", transform=ax.transAxes,
+            va='bottom', ha='center', fontsize=12, color='#111111', zorder=6)
+
+def _panel_diagnostic(ax, x_px, y_px):
+    """Bottom-centre label: Left%, Top%, n — same format as FixationDensityPlot."""
+    if x_px.size == 0:
+        label = "n = 0"
+    else:
+        n = x_px.size
+        pct_left = 100.0 * (x_px <= IMAGE_WIDTH  / 2).sum() / n
+        pct_top  = 100.0 * (y_px <= IMAGE_HEIGHT / 2).sum() / n
+        label = f"Left {pct_left:.1f}%  ·  Top {pct_top:.1f}%  ·  n = {n:,}"
+    ax.text(0.5, 0.09, label, transform=ax.transAxes, ha="center", va="bottom",
+            fontsize=12, color="#111111",
+            bbox=dict(boxstyle="round,pad=0.35", facecolor="white", alpha=0.65, linewidth=0),
+            zorder=7)
 
 def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lookup):
     """Builds the 3x3 figure for a single image.
@@ -264,8 +281,14 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
         scrambled_map = get_fixation_map(fixation_maps, image_name, session, "disamb_not_intact")
         mooney_map = get_fixation_map(fixation_maps, image_name, session, f"mooney_post_intact_{awareness}")
 
-        # This row's Mooney fixation points (the thing being scored)
-        x_px, y_px = get_mooney_fixation_points(fixations, image_name, session, awareness)
+        # This row's Mooney fixation points (the thing being scored, overlaid on every column)
+        x_px, y_px = get_fixation_points(
+            fixations, image_name, session, "mooney_post_intact", awareness)
+
+        # Disambiguator-phase fixations that BUILT each reference map (session-split, not
+        # awareness-split) — used only for that panel's diagnostic, not the overlay.
+        intact_x, intact_y       = get_fixation_points(fixations, image_name, session, "disamb_intact")
+        scrambled_x, scrambled_y = get_fixation_points(fixations, image_name, session, "disamb_not_intact")
 
         # This row's NSS scores
         _, nss_intact, nss_scrambled, _ = score_lookup.get(
@@ -276,6 +299,7 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
         _draw_background(ax, mooney_bg, "mooney", img_extent)
         _draw_reference_map(ax, mooney_map)
         _draw_fixations(ax, x_px, y_px)
+        _panel_diagnostic(ax, x_px, y_px)
 
         # --- Col 1: Intact reference map + Mooney fixations ---
         ax = axes[row_idx, 1]
@@ -283,6 +307,7 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
         _draw_reference_map(ax, intact_map)
         _draw_fixations(ax, x_px, y_px)
         _panel_score(ax, nss_intact)
+        _panel_diagnostic(ax, intact_x, intact_y)
 
         # --- Col 2: Scrambled reference map + Mooney fixations ---
         ax = axes[row_idx, 2]
@@ -290,6 +315,7 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
         _draw_reference_map(ax, scrambled_map)
         _draw_fixations(ax, x_px, y_px)
         _panel_score(ax, nss_scrambled)
+        _panel_diagnostic(ax, scrambled_x, scrambled_y)
 
     # Lock every panel to the full canvas so the overlay lines up 1:1 with the maps
     column_titles = ["Mooney (where they looked)", "Intact ref map", "Scrambled ref map"]
@@ -298,16 +324,20 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
             ax = axes[row_idx, col_idx]
             ax.set_xlim(0, IMAGE_WIDTH)
             ax.set_ylim(IMAGE_HEIGHT, 0)  # origin at top, y increases downward
+            ax.set_aspect('auto')         # override imshow's aspect='equal' so axes fills its panel
             ax.set_xticks([])
             ax.set_yticks([])
             for spine in ax.spines.values():
                 spine.set_visible(False)
             if row_idx == 0:
-                ax.set_title(column_titles[col_idx], fontsize=15, fontweight='bold', pad=12)
+                # Extra pad on the disamb columns so the title clears the NSS label drawn
+                # just above each panel (order top-to-bottom: title, NSS score, panel).
+                title_pad = 30 if col_idx in (1, 2) else 12
+                ax.set_title(column_titles[col_idx], fontsize=15, fontweight='bold', pad=title_pad)
             if col_idx == 0:
                 ax.set_ylabel(row_label, fontsize=15, fontweight='bold', labelpad=20)
 
-    fig.subplots_adjust(hspace=0.05, wspace=0.05, left=0.07, right=0.99, bottom=0.01, top=0.89)
+    fig.subplots_adjust(hspace=0.05, wspace=0.05)
     plt.suptitle(
         f"Image: {image_name}   |   ranked by unconscious_unaware NSS_diff (intact - scrambled) = {diff_uu:.3f}",
         fontsize=18, y=0.93
