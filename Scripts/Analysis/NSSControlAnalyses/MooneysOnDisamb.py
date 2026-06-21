@@ -55,7 +55,7 @@ DISAMB_DIRS = [
 
 # 4. Visual settings
 N_TOP = 40                # How many top-ranked images to plot
-FIGURE_SIZE = (20, 18)    # Width, Height of the final saved image
+FIGURE_SIZE = (28, 21)    # Width, Height of the final saved image
 DPI = 150
 HEATMAP_COLORMAP = "jet"  # Reference saliency map colors (blue=low, red=high)
 HEATMAP_ALPHA = 0.45      # Transparency of the reference map overlay
@@ -307,7 +307,7 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
             if col_idx == 0:
                 ax.set_ylabel(row_label, fontsize=15, fontweight='bold', labelpad=20)
 
-    fig.subplots_adjust(hspace=0.05, wspace=0.05)
+    fig.subplots_adjust(hspace=0.05, wspace=0.05, left=0.07, right=0.99, bottom=0.01, top=0.89)
     plt.suptitle(
         f"Image: {image_name}   |   ranked by unconscious_unaware NSS_diff (intact - scrambled) = {diff_uu:.3f}",
         fontsize=18, y=0.93
