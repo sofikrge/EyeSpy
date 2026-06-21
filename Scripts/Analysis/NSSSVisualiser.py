@@ -20,7 +20,7 @@ from scipy.fft import fft2, ifft2
 BASE_PATH = Path("analysesresults/NSS")
 STATS_PATH = BASE_PATH / "NSS_crossphase_descriptives.pkl"  # Contains the calculated scores
 MAPS_PATH = BASE_PATH / "FixMaps_full.pkl"                  # Contains the pre-blurred heatmaps
-OUTPUT_DIR = Path("Figures/nss_separated_analyses/Topppp20") # Where images will be saved
+OUTPUT_DIR = Path("Figures/nss_separated_analyses/Top40UUnawareInteraction") # Where images will be saved
 
 # 2. Screen and Eye-Tracking properties
 MASK_PPD = 48.55          # Pixels Per Degree: How many pixels represent 1 degree of visual angle
@@ -111,26 +111,20 @@ def load_data():
 
 
 def rank_images_by_interaction(results):
-    """Finds which images had the biggest difference between Conscious and Unconscious viewing."""
+    """Ranks images by NSS_diff (NSS_intact - NSS_scrambled) within the unconscious_unaware
+    condition, ascending — so the MOST NEGATIVE diffs come first. A negative diff means the
+    scrambled reference map scores higher than the intact one (scrambled > intact), which is
+    the effect of interest here."""
     ranked = []
-    
     for entry in results['image']:
-        if entry.get('condition') != 'C':
-            continue # Skip until we find a Conscious (C) entry
-        
-        img = entry['img']
-        c_diff = entry.get('NSS_diff_img', 0)
-        
-        # Find the matching Unconscious (U) entry for this exact same image
-        u_entry = next((e for e in results['image'] if e['img'] == img and e['condition'] == 'U'), None)
-        u_diff = u_entry.get('NSS_diff_img', 0) if u_entry else 0
-        
-        # Calculate the interaction score (Difference of Differences)
-        interaction = c_diff - u_diff
-        ranked.append((interaction, img))
-    
-    # Sort them from highest score to lowest score
-    ranked.sort(reverse=True)
+        if entry.get('condition') != 'U':
+            continue
+        if entry.get('awareness') != 'unconscious_unaware':
+            continue
+        diff = entry.get('NSS_diff_img', np.nan)
+        if np.isfinite(diff):
+            ranked.append((diff, entry['img']))
+    ranked.sort(reverse=False)
     return ranked
 
 
@@ -155,9 +149,9 @@ def create_visualization(rank, image_name, score, fixation_maps):
     
     # Define what goes on each row (Awareness States)
     rows = [
-        ("Conscious (Aware)", "C", "conscious_aware"),
-        ("Unconscious (Aware)", "U", "unconscious_aware"),
-        ("Unconscious (Unaware)", "U", "unconscious_unaware"),
+        ("C Aware", "C", "conscious_aware"),
+        ("UC Aware", "U", "unconscious_aware"),
+        ("UC Unaware", "U", "unconscious_unaware"),
     ]
     # Define what goes on each column (Image Types)
     columns = [
@@ -212,7 +206,7 @@ def create_visualization(rank, image_name, score, fixation_maps):
     
     # 5. Final adjustments and save
     fig.subplots_adjust(hspace=0.02, wspace=0.05) # Squeeze the plots closer together
-    plt.suptitle(f"Image: {image_name} (Interaction Score: {score:.3f})", fontsize=22, y=0.98)
+    plt.suptitle(f"Image: {image_name} (NSS Diff (within U unaware): {score:.3f})", fontsize=22, y=0.98)
     
     return fig
 
@@ -228,7 +222,7 @@ def main():
     # Get the data and figure out which 40 images to plot
     results, fixation_maps = load_data()
     ranked_images = rank_images_by_interaction(results)
-    top_40 = ranked_images[:40] 
+    top_40 = ranked_images[:40]
     
     print(f"\n🎨 Generating {len(top_40)} visualizations...")
     
