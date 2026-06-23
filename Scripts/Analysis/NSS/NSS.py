@@ -681,6 +681,19 @@ if __name__ == "__main__":
     if keep_d.any():
         print(f"Cross Diff:     mean={np.nanmean(diff_vals):.4f}")
 
+    # Dominant (tracked) eye is constant per (participant, session); build a
+    # lookup from the parquet so it can be stamped onto the exported NSS tables.
+    if "dominant_eye" in fixations.columns:
+        eye_lookup = (
+            fixations[["participant", "session", "dominant_eye"]]
+            .astype({"participant": str, "session": str})
+            .drop_duplicates()
+            .set_index(["participant", "session"])["dominant_eye"]
+            .to_dict()
+        )
+    else:
+        eye_lookup = {}
+
     # ==========================================
     # CSV EXPORT WITHIN PHASE NSS
     # ==========================================
@@ -701,6 +714,7 @@ if __name__ == "__main__":
                     'ImageType': img_type.split("_conscious")[0].split("_unconscious")[0],
                     'NSS': subj['NSSSimPerSubj'],
                     'Awareness': img_data.get('awareness', None),
+                    'Dominant_Eye': eye_lookup.get((str(subj['ParticipantID']), str(session)), None),
                 })
 
     if w_flat: # convert to pandas dataframe
@@ -737,6 +751,7 @@ if __name__ == "__main__":
                     'Awareness': img_data['awareness'],
                     'Trial': subj['ParticipantID'].split('_t')[1],
                     'Within-NSS-Typicality': disamb_lookup.get((subj['ParticipantID'].split('_t')[0], image_name, session), np.nan),
+                    'Dominant_Eye': eye_lookup.get((subj['ParticipantID'].split('_t')[0], str(session)), None),
                 })
 
     # convert to pandas
@@ -754,7 +769,7 @@ if __name__ == "__main__":
 
     # Long format sasving
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Within-NSS-Typicality'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Within-NSS-Typicality', 'Dominant_Eye'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'

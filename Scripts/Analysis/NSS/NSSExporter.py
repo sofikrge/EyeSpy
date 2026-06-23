@@ -112,9 +112,9 @@ export_df = (
           .alias("image_type")
     ])
     .select([
-        "ImageName", "session", "image_type", "participant", 
-        "x_deg_centered", "y_deg", "condition", "trial_number", 
-        "awareness"
+        "ImageName", "session", "image_type", "participant",
+        "x_deg_centered", "y_deg", "condition", "trial_number",
+        "awareness", "dominant_eye"
     ])
     .drop_nulls(subset=["image_type"])
 )

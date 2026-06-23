@@ -9,15 +9,22 @@ from pathlib import Path
 import numpy as np
 import scipy.io as sio
 
+def get_dominant_eye(gaze):
+    """Return the tracked (dominant) eye for a GazeDataFrame as 'left' or 'right'.
+
+    The EyeLink records the participant's dominant eye, so the tracked-eye
+    metadata doubles as the dominant-eye label used downstream. Defaults to
+    'right' when the metadata is missing."""
+    md = getattr(gaze, "metadata", None) or getattr(gaze, "_metadata", None) or {}
+    te = md.get("tracked_eye")
+    return "left" if str(te or "R").strip().upper() in ("L", "LEFT") else "right"  # if empty default to right, normalise naming
+
 def shift_gaze_offset(dataset, eye_offset=EYE_OFFSET):
     """Shift gaze coordinates by a specified offset for left and right eyes."""
-    
+
     for g in dataset.gaze:
-        md = getattr(g, "metadata", None) or getattr(g, "_metadata", None) or {}
-        te = md.get("tracked_eye")
-        
         # Determine eye and offset
-        eye = "left" if str(te or "R").strip().upper() in ("L", "LEFT") else "right" # if empty default to right, normalise naming
+        eye = get_dominant_eye(g)
         off = eye_offset.get(eye, 0.0) # look up offset for this eye, default to 0 if not found
         
         # Apply offset
@@ -277,6 +284,9 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             df_trials_combined, left_on='onset', right_on='trial_start', strategy='backward'
         )
 
+        # Tag every event with this session's dominant (tracked) eye
+        ev_df = ev_df.with_columns(pl.lit(get_dominant_eye(dataset.gaze[i])).alias("dominant_eye"))
+
         # Assign phase
         ev_df = ev_df.with_columns(
             pl.when((pl.col("onset") >= pl.col("disambig_start")) &
@@ -294,7 +304,8 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             "name", "onset", "offset", "duration", "x","y", "dist_from_center",
             "amplitude", "peak_velocity", "dispersion", "disposition",
             "block_type", "BlockNum", "trial_number", "condition", "phase",
-            "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q"
+            "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q",
+            "dominant_eye"
         ]
         missing_cols = {col: pl.lit(None) for col in desired_cols if col not in ev_df.columns}
         if missing_cols:
