@@ -12,22 +12,12 @@ overlap, this script overlays the actual Mooney fixation LOCATIONS on top of the
 scrambled reference maps side by side. If the Mooney fixations sit on the hot regions of the
 scrambled map more than the intact map, you can SEE why NSS_scrambled > NSS_intact.
 
-Per image (3x6 grid): the standard 3x3 grid (rows = awareness, cols = Mooney / Intact /
-Scrambled) is plotted twice side by side, once for left-eye-dominant participants and once
-for right-eye-dominant participants. EVERYTHING is eye-split — the reference saliency maps,
-the Left/Top bias % diagnostics, the Mooney fixation overlay, and the cross-phase NSS score.
-Each half is therefore a fully self-contained cross-phase analysis for that eye group.
+Per image (3x1 grid), focused on the unconscious_unaware condition:
+    [ Mooney + its fixations ] [ Intact ref map + Mooney fixations ] [ Scrambled ref map + Mooney fixations ]
 
-The eye-split reference maps and scores are recomputed on the fly from the parquet using
-NSS.py's own functions (CreateFixationMaps_from_df + the cross-phase scoring helpers), so
-the methodology matches the main analysis exactly. The cached cross-phase pickle is used
-only to rank which images to plot (by the pooled unconscious_unaware NSS_diff).
-
-Run AFTER NSS.py has produced the cached pickle (for ranking), and after Stage 1 +
-NSSExporter have written a parquet that includes the `dominant_eye` column.
+Run AFTER NSS.py has produced the cached pickles.
 """
 
-import sys
 import pickle
 import numpy as np
 import pandas as pd
@@ -36,22 +26,15 @@ import matplotlib.image as mpimg
 from pathlib import Path
 from scipy.fft import fft2, ifft2
 
-# Reuse NSS.py's canonical map-building and scoring helpers so the eye-split maps and
-# scores are computed with exactly the same methodology as the main analysis (LOSO-free
-# cross-phase scoring, z-norm with ddof=0, disk stencil, MATLAB-compatible rounding).
-_NSS_DIR = Path(__file__).resolve().parents[1] / "NSS"
-if str(_NSS_DIR) not in sys.path:
-    sys.path.insert(0, str(_NSS_DIR))
-import NSS as nss  # noqa: E402
-
 # ============================================================================
 # CONFIGURATION - Settings you might need to change
 # ============================================================================
 
 # 1. Where to find the data and save the plots
 BASE_PATH = Path("analysesresults/NSS")
-STATS_PATH = BASE_PATH / "NSS_crossphase_descriptives.pkl"  # Cross-phase scores — used only to rank images
-FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")     # Raw fixations (overlay + eye-split maps/scores)
+STATS_PATH = BASE_PATH / "NSS_crossphase_descriptives.pkl"  # Cross-phase scores (ranking + DV)
+MAPS_PATH = BASE_PATH / "FixMaps_full.pkl"                  # Pre-blurred reference saliency maps
+FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")     # Raw fixations (for the overlay points)
 OUTPUT_DIR = Path("Figures/nss_separated_analyses/MooneysOnDisamb")  # Where images will be saved
 
 # 2. Screen and Eye-Tracking properties (kept consistent with NSS.py / Settings.py by hand)
@@ -72,9 +55,7 @@ DISAMB_DIRS = [
 
 # 4. Visual settings
 N_TOP = 40                # How many top-ranked images to plot
-FIGURE_SIZE = (46, 18)    # Width, Height of the final saved image (3x6: two eye groups side by side)
-# Dominant-eye groups plotted side by side (left triplet, right triplet)
-EYE_GROUPS = [("left", "Left-eye dominant"), ("right", "Right-eye dominant")]
+FIGURE_SIZE = (25, 18)    # Width, Height of the final saved image
 DPI = 150
 HEATMAP_COLORMAP = "jet"  # Reference saliency map colors (blue=low, red=high)
 HEATMAP_ALPHA = 0.45      # Transparency of the reference map overlay
@@ -139,64 +120,27 @@ def scramble_image(image_path):
     scrambled = img.min() + (img.max() - img.min()) * scrambled
     return np.clip(scrambled, 0, 1)
 
-def _fixation_subset(fixations, image_name, session, image_type, awareness=None, eye=None):
-    """Filter the parquet to one image / session / image_type, optionally awareness + eye."""
-    mask = (
-        (fixations["ImageName"].astype(str) == str(image_name)) &
-        (fixations["session"].astype(str).str.upper() == str(session).upper()) &
-        (fixations["image_type"] == image_type)
-    )
-    if awareness is not None:
-        mask &= (fixations["awareness"] == awareness)
-    if eye is not None:
-        mask &= (fixations["dominant_eye"].astype(str) == str(eye))
-    return fixations[mask]
-
-def build_reference_map(fixations, image_name, session, image_type, awareness=None, eye=None):
-    """Build a single-image (eye-split) saliency map straight from the parquet using
-    NSS.py's CreateFixationMaps_from_df, so it is identical to the analysis reference maps
-    (per-subject hit map → average across subjects → Gaussian blur). Returns the blurred
-    map array, or None if there are no matching fixations."""
-    sub = _fixation_subset(fixations, image_name, session, image_type, awareness, eye)
-    if sub.empty:
-        return None
-    fmaps = nss.CreateFixationMaps_from_df(sub, MASK_PPD)  # one group in, one entry out
-    return fmaps[0]["fixMapPerIm"] if fmaps else None
-
-def score_eye_cross(fixations, image_name, session, awareness, eye, intact_map, scrambled_map):
-    """Cross-phase NSS for one eye group: that group's Mooney fixations scored against the
-    (eye-split) intact / scrambled reference maps. Mirrors calculate_NSS_crossphase exactly
-    — z-normalise each reference, score every (participant, trial) unit via the disk stencil,
-    then aggregate with the permissive NaN policy. Returns (nss_intact, nss_scrambled)."""
-    df_group = _fixation_subset(fixations, image_name, session, "mooney_post_intact",
-                                awareness=awareness, eye=eye)
-    if df_group.empty:
-        return np.nan, np.nan
-
-    dy_off, dx_off = nss._disk_offsets(nss.SIGMA)
-    coords_list = nss._coords_in_fixmaps_order(df_group, MASK_PPD, IMAGE_HEIGHT, IMAGE_WIDTH)
-
-    def _zref(m):
-        if m is None:
-            return None
-        z, _, _ = nss._z_normalize(np.asarray(m, dtype=float))
-        return z
-
-    z_intact, z_scram = _zref(intact_map), _zref(scrambled_map)
-    scores_i = [nss._nss_for_subject(z_intact, c, dy_off, dx_off) for c in coords_list]
-    scores_s = [nss._nss_for_subject(z_scram, c, dy_off, dx_off) for c in coords_list]
-    return (nss._aggregate_by_policy(scores_i, "permissive"),
-            nss._aggregate_by_policy(scores_s, "permissive"))
+def get_fixation_map(fixation_maps, image_name, session, image_type):
+    """Searches the loaded FixMaps for the specific pre-calculated reference map."""
+    for fmap in fixation_maps:
+        if str(fmap['img']) == str(image_name) and \
+           str(fmap['condition']).upper() == str(session).upper() and \
+           fmap['image_type'] == image_type:
+            return fmap['fixMapPerIm']
+    return None
 
 def load_data():
-    """Loads cross-phase stats (for ranking only) and the raw fixations."""
+    """Loads cross-phase stats, reference maps, and the raw fixations."""
     print("📂 Loading data...")
     with open(STATS_PATH, "rb") as f:
         stats = pickle.load(f)
     results = stats["data"] if isinstance(stats, dict) else stats
 
+    with open(MAPS_PATH, "rb") as f:
+        maps = pickle.load(f)["data"]
+
     fixations = pd.read_parquet(FIX_FILE)
-    return results, fixations
+    return results, maps, fixations
 
 def rank_images_by_interaction(results):
     """Ranks images by NSS_diff (NSS_intact - NSS_scrambled) within the unconscious_unaware
@@ -218,14 +162,25 @@ def rank_images_by_interaction(results):
     ranked.sort(key=lambda t: t[0], reverse=False)
     return ranked
 
-def get_fixation_points(fixations, image_name, session, image_type, awareness=None, eye=None):
+def build_score_lookup(results):
+    """(img, awareness) -> (condition, NSS_intact, NSS_scrambled, NSS_diff) from cross-phase results."""
+    lookup = {}
+    for entry in results['image']:
+        lookup[(entry['img'], entry.get('awareness'))] = (
+            entry.get('condition'),
+            entry.get('NSS_intact_img', np.nan),
+            entry.get('NSS_scrambled_img', np.nan),
+            entry.get('NSS_diff_img', np.nan),
+        )
+    return lookup
+
+def get_fixation_points(fixations, image_name, session, image_type, awareness=None):
     """Pixel coords (x, y) of fixations for one image / session / image_type.
 
     Mirrors how each panel's map is built:
       • Mooney maps are awareness-split  → pass awareness to filter the group.
       • Disambiguator maps are session-split, NOT awareness-split → leave awareness=None
-        (matches NSS.py reference maps and FixationDensityPlot).
-      • Pass eye ('left'/'right') to keep only participants with that dominant eye."""
+        (matches NSS.py reference maps and FixationDensityPlot)."""
     mask = (
         (fixations["ImageName"].astype(str) == str(image_name)) &
         (fixations["session"].astype(str).str.upper() == str(session).upper()) &
@@ -233,8 +188,6 @@ def get_fixation_points(fixations, image_name, session, image_type, awareness=No
     )
     if awareness is not None:
         mask &= (fixations["awareness"] == awareness)
-    if eye is not None:
-        mask &= (fixations["dominant_eye"].astype(str) == str(eye))
     sub = fixations[mask]
     if sub.empty:
         return np.array([]), np.array([])
@@ -295,15 +248,12 @@ def _panel_diagnostic(ax, x_px, y_px):
             bbox=dict(boxstyle="round,pad=0.35", facecolor="white", alpha=0.65, linewidth=0),
             zorder=7)
 
-def create_visualization(image_name, diff_uu, fixations):
-    """Builds the 3x6 figure for a single image: the same 3x3 grid plotted once per
-    dominant-eye group, side by side.
+def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lookup):
+    """Builds the 3x3 figure for a single image.
 
-    Rows = awareness conditions. Within each eye group the columns are
-    Mooney / Intact ref map / Scrambled ref map. EVERYTHING is eye-split — the reference
-    maps, the Mooney overlay, the disambiguator-phase bias diagnostics, and the NSS scores
-    are all computed from this eye group's fixations only."""
-    # 1. Backgrounds (shared across rows AND eye groups)
+    Rows = awareness conditions, Columns = Mooney / Intact ref map / Scrambled ref map.
+    The SAME row's Mooney fixations are overlaid on that row's intact and scrambled maps."""
+    # 1. Backgrounds (shared across rows)
     mooney_bg = find_image_file(image_name, MOONEY_DIRS)
     intact_bg = find_image_file(image_name, DISAMB_DIRS)
     scrambled_bg = scramble_image(intact_bg) if intact_bg else None
@@ -315,75 +265,62 @@ def create_visualization(image_name, diff_uu, fixations):
     y_pad = (IMAGE_HEIGHT - img_px_h) / 2
     img_extent = [x_pad, IMAGE_WIDTH - x_pad, IMAGE_HEIGHT - y_pad, y_pad]
 
-    # Rows: (row label, session, awareness). Disamb maps are session-split (not awareness-
-    # split), but here they ARE further eye-split, so they depend on (session, eye).
+    # Rows: (row label, session, awareness). Disamb maps are NOT awareness-split, so they
+    # depend only on the session (C vs U).
     rows = [
         ("Conscious Aware", "C", "conscious_aware"),
         ("UC Aware", "U", "unconscious_aware"),
         ("UC Unaware", "U", "unconscious_unaware"),
     ]
 
-    # Cache eye-split maps within this image so the shared session-U disamb maps
-    # (UA + UU rows) are only built once per eye.
-    _map_cache = {}
-    def ref_map(image_type, session, eye, awareness=None):
-        key = (image_type, str(session).upper(), eye, awareness)
-        if key not in _map_cache:
-            _map_cache[key] = build_reference_map(
-                fixations, image_name, session, image_type, awareness=awareness, eye=eye)
-        return _map_cache[key]
+    fig, axes = plt.subplots(3, 3, figsize=FIGURE_SIZE)
 
-    fig, axes = plt.subplots(3, 6, figsize=FIGURE_SIZE)
+    for row_idx, (row_label, session, awareness) in enumerate(rows):
+        # Reference maps for this session + this row's Mooney map
+        intact_map = get_fixation_map(fixation_maps, image_name, session, "disamb_intact")
+        scrambled_map = get_fixation_map(fixation_maps, image_name, session, "disamb_not_intact")
+        mooney_map = get_fixation_map(fixation_maps, image_name, session, f"mooney_post_intact_{awareness}")
 
-    for eye_idx, (eye, _eye_title) in enumerate(EYE_GROUPS):
-        col_off = eye_idx * 3  # 0 for the left triplet, 3 for the right triplet
+        # This row's Mooney fixation points (the thing being scored, overlaid on every column)
+        x_px, y_px = get_fixation_points(
+            fixations, image_name, session, "mooney_post_intact", awareness)
 
-        for row_idx, (row_label, session, awareness) in enumerate(rows):
-            # Eye-split reference maps for this session + this row's eye-split Mooney map
-            intact_map    = ref_map("disamb_intact", session, eye)
-            scrambled_map = ref_map("disamb_not_intact", session, eye)
-            mooney_map    = ref_map("mooney_post_intact", session, eye, awareness=awareness)
+        # Disambiguator-phase fixations that BUILT each reference map (session-split, not
+        # awareness-split) — used only for that panel's diagnostic, not the overlay.
+        intact_x, intact_y       = get_fixation_points(fixations, image_name, session, "disamb_intact")
+        scrambled_x, scrambled_y = get_fixation_points(fixations, image_name, session, "disamb_not_intact")
 
-            # This eye group's Mooney fixation points (the thing being scored, overlaid on every column)
-            x_px, y_px = get_fixation_points(
-                fixations, image_name, session, "mooney_post_intact", awareness, eye=eye)
+        # This row's NSS scores
+        _, nss_intact, nss_scrambled, _ = score_lookup.get(
+            (image_name, awareness), (None, np.nan, np.nan, np.nan))
 
-            # This eye group's disambiguator-phase fixations that BUILT each reference map
-            # (session + eye split) — used only for that panel's bias diagnostic.
-            intact_x, intact_y       = get_fixation_points(fixations, image_name, session, "disamb_intact", eye=eye)
-            scrambled_x, scrambled_y = get_fixation_points(fixations, image_name, session, "disamb_not_intact", eye=eye)
+        # --- Col 0: Mooney image + Mooney fixations (context) ---
+        ax = axes[row_idx, 0]
+        _draw_background(ax, mooney_bg, "mooney", img_extent)
+        _draw_reference_map(ax, mooney_map)
+        _draw_fixations(ax, x_px, y_px)
+        _panel_diagnostic(ax, x_px, y_px)
 
-            # This eye group's NSS scores, recomputed against this eye group's reference maps
-            nss_intact, nss_scrambled = score_eye_cross(
-                fixations, image_name, session, awareness, eye, intact_map, scrambled_map)
+        # --- Col 1: Intact reference map + Mooney fixations ---
+        ax = axes[row_idx, 1]
+        _draw_background(ax, intact_bg, "disamb_intact", img_extent)
+        _draw_reference_map(ax, intact_map)
+        _draw_fixations(ax, x_px, y_px)
+        _panel_score(ax, nss_intact)
+        _panel_diagnostic(ax, intact_x, intact_y)
 
-            # --- Col 0: Mooney image + Mooney fixations (context) ---
-            ax = axes[row_idx, col_off + 0]
-            _draw_background(ax, mooney_bg, "mooney", img_extent)
-            _draw_reference_map(ax, mooney_map)
-            _draw_fixations(ax, x_px, y_px)
-            _panel_diagnostic(ax, x_px, y_px)
-
-            # --- Col 1: Intact reference map + Mooney fixations ---
-            ax = axes[row_idx, col_off + 1]
-            _draw_background(ax, intact_bg, "disamb_intact", img_extent)
-            _draw_reference_map(ax, intact_map)
-            _draw_fixations(ax, x_px, y_px)
-            _panel_score(ax, nss_intact)
-            _panel_diagnostic(ax, intact_x, intact_y)
-
-            # --- Col 2: Scrambled reference map + Mooney fixations ---
-            ax = axes[row_idx, col_off + 2]
-            _draw_background(ax, scrambled_bg, "disamb_not_intact", img_extent)
-            _draw_reference_map(ax, scrambled_map)
-            _draw_fixations(ax, x_px, y_px)
-            _panel_score(ax, nss_scrambled)
-            _panel_diagnostic(ax, scrambled_x, scrambled_y)
+        # --- Col 2: Scrambled reference map + Mooney fixations ---
+        ax = axes[row_idx, 2]
+        _draw_background(ax, scrambled_bg, "disamb_not_intact", img_extent)
+        _draw_reference_map(ax, scrambled_map)
+        _draw_fixations(ax, x_px, y_px)
+        _panel_score(ax, nss_scrambled)
+        _panel_diagnostic(ax, scrambled_x, scrambled_y)
 
     # Lock every panel to the full canvas so the overlay lines up 1:1 with the maps
-    triplet_titles = ["Mooney (where they looked)", "Intact ref map", "Scrambled ref map"]
+    column_titles = ["Mooney (where they looked)", "Intact ref map", "Scrambled ref map"]
     for row_idx, (row_label, _, _) in enumerate(rows):
-        for col_idx in range(6):
+        for col_idx in range(3):
             ax = axes[row_idx, col_idx]
             ax.set_xlim(0, IMAGE_WIDTH)
             ax.set_ylim(IMAGE_HEIGHT, 0)  # origin at top, y increases downward
@@ -395,25 +332,15 @@ def create_visualization(image_name, diff_uu, fixations):
             if row_idx == 0:
                 # Extra pad on the disamb columns so the title clears the NSS label drawn
                 # just above each panel (order top-to-bottom: title, NSS score, panel).
-                within = col_idx % 3
-                title_pad = 30 if within in (1, 2) else 12
-                ax.set_title(triplet_titles[within], fontsize=14, fontweight='bold', pad=title_pad)
-            if col_idx % 3 == 0:
+                title_pad = 30 if col_idx in (1, 2) else 12
+                ax.set_title(column_titles[col_idx], fontsize=15, fontweight='bold', pad=title_pad)
+            if col_idx == 0:
                 ax.set_ylabel(row_label, fontsize=15, fontweight='bold', labelpad=20)
 
     fig.subplots_adjust(hspace=0.05, wspace=0.05)
-
-    # Per-eye-group banner centred over each triplet
-    for eye_idx, (_eye, eye_title) in enumerate(EYE_GROUPS):
-        left_ax  = axes[0, eye_idx * 3]
-        right_ax = axes[0, eye_idx * 3 + 2]
-        x_center = (left_ax.get_position().x0 + right_ax.get_position().x1) / 2
-        fig.text(x_center, 0.95, eye_title, ha='center', va='bottom',
-                 fontsize=17, fontweight='bold')
-
     plt.suptitle(
         f"Image: {image_name}   |   ranked by unconscious_unaware NSS_diff (intact - scrambled) = {diff_uu:.3f}",
-        fontsize=18, y=0.99
+        fontsize=18, y=0.93
     )
     return fig
 
@@ -424,10 +351,8 @@ def create_visualization(image_name, diff_uu, fixations):
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    results, fixations = load_data()
-    if "dominant_eye" not in fixations.columns:
-        raise SystemExit("❌ No 'dominant_eye' column in the parquet — rerun Stage 1 + "
-                         "NSSExporter so the eye-split maps can be built.")
+    results, fixation_maps, fixations = load_data()
+    score_lookup = build_score_lookup(results)
     ranked_images = rank_images_by_interaction(results)
     top = ranked_images[:N_TOP]
 
@@ -435,7 +360,7 @@ def main():
 
     for rank, (diff, nss_intact, nss_scrambled, img_name) in enumerate(top, start=1):
         print(f"   [{rank:2d}/{len(top)}] Processing Image: {img_name}")
-        fig = create_visualization(img_name, diff, fixations)
+        fig = create_visualization(img_name, diff, fixation_maps, fixations, score_lookup)
         output_file = OUTPUT_DIR / f"Rank_{rank:02d}_{img_name}.png"
         fig.savefig(output_file, dpi=DPI, bbox_inches='tight', transparent=False)
         plt.close(fig)
