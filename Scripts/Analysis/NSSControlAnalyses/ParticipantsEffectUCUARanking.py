@@ -59,7 +59,7 @@ agg.index += 1  # 1-based rank
 n_participants = len(agg)
 group_mean_diff = df["NSS_diff"].mean()
 
-print(f"\nCross-phase NSS ranking — {TARGET_AWARENESS}  (N={n_participants} participants)")
+print(f"\nCross-phase NSS ranking - {TARGET_AWARENESS}  (N={n_participants} participants)")
 print(f"Effect: NSS_scrambled > NSS_intact  →  negative NSS_diff drives the effect")
 print(f"Group mean NSS_diff = {group_mean_diff:.4f}\n")
 

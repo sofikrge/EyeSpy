@@ -4,7 +4,7 @@ Mooney-on-Disambiguator Visualization
 A more *direct* way of looking at the cross-phase NSS than NSSSVisualiser.py.
 
 The cross-phase NSS score is literally: "how well do the Mooney-phase fixations land on
-the disambiguation-phase saliency map?" — scored once against the INTACT reference map and
+the disambiguation-phase saliency map?" - scored once against the INTACT reference map and
 once against the SCRAMBLED reference map (NSS_diff = intact - scrambled).
 
 Instead of showing three independent heatmaps and asking the viewer to mentally compute the
@@ -131,7 +131,7 @@ def get_fixation_map(fixation_maps, image_name, session, image_type):
 
 def load_data():
     """Loads cross-phase stats, reference maps, and the raw fixations."""
-    print("📂 Loading data...")
+    print("Loading data...")
     with open(STATS_PATH, "rb") as f:
         stats = pickle.load(f)
     results = stats["data"] if isinstance(stats, dict) else stats
@@ -144,7 +144,7 @@ def load_data():
 
 def rank_images_by_interaction(results):
     """Ranks images by NSS_diff (NSS_intact - NSS_scrambled) within the unconscious_unaware
-    condition, ascending — so the MOST NEGATIVE diffs come first. A negative diff means the
+    condition, ascending - so the MOST NEGATIVE diffs come first. A negative diff means the
     scrambled reference map scores higher than the intact one (scrambled > intact), which is
     the effect of interest here. Returns (diff, intact, scrambled, img) tuples."""
     ranked = []
@@ -235,7 +235,7 @@ def _panel_score(ax, value):
             va='bottom', ha='center', fontsize=12, color='#111111', zorder=6)
 
 def _panel_diagnostic(ax, x_px, y_px):
-    """Bottom-centre label: Left%, Top%, n — same format as FixationDensityPlot."""
+    """Bottom-centre label: Left%, Top%, n - same format as FixationDensityPlot."""
     if x_px.size == 0:
         label = "n = 0"
     else:
@@ -286,7 +286,7 @@ def create_visualization(image_name, diff_uu, fixation_maps, fixations, score_lo
             fixations, image_name, session, "mooney_post_intact", awareness)
 
         # Disambiguator-phase fixations that BUILT each reference map (session-split, not
-        # awareness-split) — used only for that panel's diagnostic, not the overlay.
+        # awareness-split) - used only for that panel's diagnostic, not the overlay.
         intact_x, intact_y       = get_fixation_points(fixations, image_name, session, "disamb_intact")
         scrambled_x, scrambled_y = get_fixation_points(fixations, image_name, session, "disamb_not_intact")
 
@@ -356,7 +356,7 @@ def main():
     ranked_images = rank_images_by_interaction(results)
     top = ranked_images[:N_TOP]
 
-    print(f"\n🎨 Generating {len(top)} visualizations...")
+    print(f"\nGenerating {len(top)} visualizations...")
 
     for rank, (diff, nss_intact, nss_scrambled, img_name) in enumerate(top, start=1):
         print(f"   [{rank:2d}/{len(top)}] Processing Image: {img_name}")
@@ -365,7 +365,7 @@ def main():
         fig.savefig(output_file, dpi=DPI, bbox_inches='tight', transparent=False)
         plt.close(fig)
 
-    print(f"\n✅ Done! All images saved to: {OUTPUT_DIR}")
+    print(f"\nDone! All images saved to: {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     main()

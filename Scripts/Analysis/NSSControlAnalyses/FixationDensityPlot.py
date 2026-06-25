@@ -5,21 +5,21 @@ Aggregate fixation density heatmap across all images, split by awareness state
 and image type.
 
 3x3 grid:
-    Rows    — awareness state: Conscious Aware / Unconscious Aware / Unconscious Unaware
-    Columns — image type:      Post-Intact Mooney / Intact Disambiguator / Scrambled Disambiguator
+    Rows    - awareness state: Conscious Aware / Unconscious Aware / Unconscious Unaware
+    Columns - image type:      Post-Intact Mooney / Intact Disambiguator / Scrambled Disambiguator
 
 Each panel is built using the EXACT same pipeline as CreateFixationMaps_from_df in NSS.py:
   1. Per participant per image  → uint32 hit map (bincount of fixation pixels)
   2. Sum participant hit maps   → divide by n_subjects  →  per-image average map
   3. Average per-image maps across all images in the cell
   4. gaussian_filter(sigma=PPD/2, mode='reflect', truncate=2.0)
-     (blur is linear so blurring the average == averaging the blurred maps — one blur at the end)
+     (blur is linear so blurring the average == averaging the blurred maps - one blur at the end)
 
 Diagnostic line at the bottom of each panel:
-    Left %  — fraction of in-bounds fixations in the left  half of the canvas (w_pixel <= WIDTH/2)
-    Top  %  — fraction of in-bounds fixations in the top   half of the canvas (h_pixel <= HEIGHT/2)
-    n       — total in-bounds fixation events summed across all images in the cell
-              (raw count, not subject-averaged — gives a sense of data volume)
+    Left %  - fraction of in-bounds fixations in the left  half of the canvas (w_pixel <= WIDTH/2)
+    Top  %  - fraction of in-bounds fixations in the top   half of the canvas (h_pixel <= HEIGHT/2)
+    n       - total in-bounds fixation events summed across all images in the cell
+              (raw count, not subject-averaged - gives a sense of data volume)
 
 Run from the project root:
     python3 Scripts/Analysis/FixationDensityPlot.py
@@ -41,10 +41,10 @@ FIX_FILE    = Path("data/NSS_all_fixations_clean.parquet")
 OUTPUT_DIR  = Path("Figures/nss_separated_analyses")
 OUTPUT_FILE = OUTPUT_DIR / "FixationDensityPlot4.png"
 
-IMAGE_HEIGHT = 600    # eye-tracking canvas height in pixels — must match NSS.py
-IMAGE_WIDTH  = 800    # eye-tracking canvas width  in pixels — must match NSS.py
-MASK_PPD     = 48.55  # pixels per visual degree — must match NSS.py
-SIGMA        = MASK_PPD / 2.0  # Gaussian blur radius — identical to NSS.py
+IMAGE_HEIGHT = 600    # eye-tracking canvas height in pixels - must match NSS.py
+IMAGE_WIDTH  = 800    # eye-tracking canvas width  in pixels - must match NSS.py
+MASK_PPD     = 48.55  # pixels per visual degree - must match NSS.py
+SIGMA        = MASK_PPD / 2.0  # Gaussian blur radius - identical to NSS.py
 
 COLORMAP    = "jet"
 DPI         = 180
@@ -66,7 +66,7 @@ IMAGE_TYPE_COLS = [
     ("disamb_not_intact",  "Scrambled Disambiguator"),
 ]
 
-# Disambiguator maps are session-split (not awareness-split) — same as NSS.py reference maps.
+# Disambiguator maps are session-split (not awareness-split) - same as NSS.py reference maps.
 # Conscious session = C, both unconscious groups share session U.
 AWARENESS_TO_SESSION = {
     "conscious_aware":     "C",
@@ -76,11 +76,11 @@ AWARENESS_TO_SESSION = {
 SESSION_LABEL = {"C": "Session C  (Conscious)", "U": "Session U  (Unconscious)"}
 
 # =============================================================================
-# COORDINATE HELPERS — exact mirror of NSS.py
+# COORDINATE HELPERS - exact mirror of NSS.py
 # =============================================================================
 
 def _round_half_away_from_zero(x):
-    """Ties round away from zero — matches MATLAB round() and NSS.py."""
+    """Ties round away from zero - matches MATLAB round() and NSS.py."""
     x = np.asarray(x, dtype=float)
     return (np.sign(x) * np.floor(np.abs(x) + 0.5)).astype(int)
 
@@ -88,7 +88,7 @@ def _round_half_away_from_zero(x):
 def _deg_to_image_pixels(x_deg, y_deg):
     """Convert visual degrees to 1-based pixel coordinates.
 
-    Returns (h_1based, w_1based) = (row, col) — same signature as NSS.py's
+    Returns (h_1based, w_1based) = (row, col) - same signature as NSS.py's
     _deg_to_image_pixels so index arithmetic below is identical.
     """
     w_1b = _round_half_away_from_zero((IMAGE_WIDTH  / 2.0) + np.asarray(x_deg, float) * MASK_PPD)
@@ -97,7 +97,7 @@ def _deg_to_image_pixels(x_deg, y_deg):
 
 
 # =============================================================================
-# MAP BUILDING — replicates CreateFixationMaps_from_df, aggregated across images
+# MAP BUILDING - replicates CreateFixationMaps_from_df, aggregated across images
 # =============================================================================
 
 def build_aggregate_density_map(df_cell):
@@ -116,7 +116,7 @@ def build_aggregate_density_map(df_cell):
         Blurred aggregate map, unscaled.
     n_in_bounds : int
         Total in-bounds fixation events across all participants and images in this cell
-        (raw sum, not subject-averaged — used only for the diagnostic label).
+        (raw sum, not subject-averaged - used only for the diagnostic label).
     """
     H, W = IMAGE_HEIGHT, IMAGE_WIDTH
     aggregate   = np.zeros((H, W), dtype=np.float64)
@@ -140,7 +140,7 @@ def build_aggregate_density_map(df_cell):
                     h0  = h1[inside] - 1          # 0-based row
                     w0  = w1[inside] - 1          # 0-based col
                     lin = (h0 * W + w0).astype(np.int64)
-                    # cast to uint16 before adding — mirrors NSS.py exactly
+                    # cast to uint16 before adding - mirrors NSS.py exactly
                     hit_map += np.bincount(lin, minlength=H * W).reshape(H, W).astype(np.uint16)
                     n_in_bounds += int(inside.sum())
 
@@ -148,17 +148,17 @@ def build_aggregate_density_map(df_cell):
             n_subj    += 1
 
         if n_subj > 0:
-            # Divide by n_subjects — matches: mapPerIm /= float(nsubj)
+            # Divide by n_subjects - matches: mapPerIm /= float(nsubj)
             aggregate += image_sum / float(n_subj)
             n_images  += 1
 
     if n_images == 0:
         return np.zeros((H, W), dtype=np.float32), 0
 
-    # Divide by n_images — turns sum-of-per-image-averages into a grand average
+    # Divide by n_images - turns sum-of-per-image-averages into a grand average
     aggregate /= float(n_images)
 
-    # Single blur — equivalent to averaging already-blurred per-image maps
+    # Single blur - equivalent to averaging already-blurred per-image maps
     # Parameters: same as gaussian_filter(mapPerIm, sigma=sigma, mode="reflect", truncate=2.0)
     density = gaussian_filter(aggregate.astype(np.float32), sigma=SIGMA,
                               mode="reflect", truncate=2.0)
@@ -211,7 +211,7 @@ def _draw_panel(ax, density, n_in_bounds, pct_left, pct_top):
               extent=[0, IMAGE_WIDTH, IMAGE_HEIGHT, 0],
               vmin=0, vmax=1, aspect="auto")
 
-    # Faint crosshair at canvas centre — visual reference for the left/top split
+    # Faint crosshair at canvas centre - visual reference for the left/top split
     ax.axvline(IMAGE_WIDTH  / 2, color="white", linewidth=0.8, alpha=0.5, linestyle="--")
     ax.axhline(IMAGE_HEIGHT / 2, color="white", linewidth=0.8, alpha=0.5, linestyle="--")
 
@@ -258,7 +258,7 @@ def main():
                     (fix["image_type"] == img_type_key)
                 ]
             else:
-                # Disambiguator: filter by session only — matches NSS.py reference map construction
+                # Disambiguator: filter by session only - matches NSS.py reference map construction
                 # (disamb maps are NOT awareness-split; both UA and UU rows use session U)
                 subset = fix[
                     (fix["session"]    == session_key) &

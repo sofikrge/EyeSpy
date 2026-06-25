@@ -21,9 +21,18 @@ import seaborn as sns
 from pathlib import Path
 
 # === CONFIG ===
+# Toggle which sessions to plot:
+#   True  -> only the unconscious session (Unconscious Aware + Unconscious Unaware)
+#   False -> all three groups (Conscious Aware + both unconscious groups)
+UNCONSCIOUS_ONLY = True
+
 INPUT_FILE  = Path("analysesresults/NSS/NSS_CrossPhase_LongFormat.csv")
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_PLOT = OUTPUT_DIR / "NSS_CrossPhase_Violin_byAwareness.png"
+OUTPUT_PLOT = OUTPUT_DIR / (
+    "NSS_CrossPhase_Violin_byAwareness_unconsciousOnly.png"
+    if UNCONSCIOUS_ONLY else
+    "NSS_CrossPhase_Violin_byAwareness.png"
+)
 
 PALETTE = ['#edf8fb', '#b3cde3', '#648fff', '#785ef0']
 REF_COLORS = {"Intact": PALETTE[3], "Scrambled": PALETTE[2]}
@@ -31,13 +40,15 @@ REF_COLORS = {"Intact": PALETTE[3], "Scrambled": PALETTE[2]}
 # Map (Session, Awareness) -> display label.
 # If your "Awareness" column uses different strings than "Aware"/"Unaware"
 # (case, spelling, etc.), the script prints the unique pairs it found at
-# runtime — edit the keys below to match those exactly.
+# runtime - edit the keys below to match those exactly.
 GROUP_MAP = {
     ("C", "conscious_aware"):   "Conscious Aware\n(PAS 2-3)",
     ("U", "unconscious_aware"):   "Unconscious Aware\n(PAS 2-3)",
     ("U", "unconscious_unaware"): "Unconscious Unaware\n(PAS 0)",
 }
 GROUP_ORDER = ["Conscious Aware\n(PAS 2-3)", "Unconscious Aware\n(PAS 2-3)", "Unconscious Unaware\n(PAS 0)"]
+if UNCONSCIOUS_ONLY:
+    GROUP_ORDER = ["Unconscious Aware\n(PAS 2-3)", "Unconscious Unaware\n(PAS 0)"]
 
 
 EMMS = {
@@ -63,6 +74,9 @@ def main():
     if n_dropped:
         print(f"Dropping {n_dropped} rows that didn't match GROUP_MAP (check Awareness labels above).")
     df = df.dropna(subset=["Group"])
+
+    # Keep only the groups requested by the UNCONSCIOUS_ONLY toggle
+    df = df[df["Group"].isin(GROUP_ORDER)]
 
     # 2. Collapse to one mean NSS per Participant x Group x ReferenceMap (across images/trials)
     df_agg = (

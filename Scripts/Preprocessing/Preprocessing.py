@@ -192,17 +192,17 @@ def load_behavioural_from_mat(mat_path, section_map):
     """
 
     if not os.path.exists(mat_path):
-        print(f"   ⚠️ MAT File not found: {mat_path}")
+        print(f"   MAT File not found: {mat_path}")
         return pl.DataFrame()
 
     try:
         mat = sio.loadmat(mat_path, squeeze_me=True, struct_as_record=False) # turn into flat scalar struct, remove dimensions, turn to python object
         expdata = _find_expdata_struct(mat)
         if expdata is None:
-            print(f"   ❌ Key 'expdata' (or similar) not found in {os.path.basename(mat_path)}")
+            print(f"   Key 'expdata' (or similar) not found in {os.path.basename(mat_path)}")
             return pl.DataFrame()
     except Exception as e:
-        print(f"   ❌ Error reading MAT structure: {e}")
+        print(f"   Error reading MAT structure: {e}")
         return pl.DataFrame()
 
     beh_rows = [] # loop over eachv section (e.g. practice, block1) and extract trials, order matches ASC
@@ -224,7 +224,7 @@ def load_behavioural_from_mat(mat_path, section_map):
 
     df = pl.DataFrame(beh_rows, infer_schema_length=None)
     if not df.is_empty():
-        print(f"   ✅ Loaded {df.height} trials from {os.path.basename(mat_path)}")
+        print(f"   Loaded {df.height} trials from {os.path.basename(mat_path)}")
     return df
 
 def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, events_out_dir,
@@ -260,7 +260,7 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
         # Check for mismatches
         n_missing = df_trials_combined.filter(pl.col("ImageName").is_null()).height
         if n_missing > 0:
-            print(f"⚠️ WARNING: {n_missing} trials missing behavioral data after merge!")
+            print(f"WARNING: {n_missing} trials missing behavioral data after merge!")
             print("   This may indicate ordinal mismatch between ASC and MAT files.")
 
         if not df_beh.is_empty():
@@ -268,7 +268,7 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             matched_trials = df_trials_combined.filter(pl.col("ImageName").is_not_null()).height
             if matched_trials < total_trials * 0.9:
                 raise ValueError(
-                    f"❌ CRITICAL: Only {matched_trials}/{total_trials} trials have behavioral data!\n"
+                    f"CRITICAL: Only {matched_trials}/{total_trials} trials have behavioral data!\n"
                     f"   Possible ordinal mismatch between s_{s_id}_{p_id}.asc and expdata_{s_id}_{p_id}.mat"
                 )
 

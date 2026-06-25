@@ -36,7 +36,7 @@ SEP = "=" * 60
 
 # ── CHECK 1: Images this participant has in the parquet ───────────────────────
 print(f"\n{SEP}")
-print(f"CHECK 1 — mooney_post_intact + {TARGET_AWARENESS} fixations in parquet")
+print(f"CHECK 1 - mooney_post_intact + {TARGET_AWARENESS} fixations in parquet")
 print(f"          (cross-phase NSS ignores mooney_post_scrambled entirely)")
 print(SEP)
 
@@ -59,7 +59,7 @@ else:
 
 # ── CHECK 2: Co-participant coverage per image ────────────────────────────────
 print(f"\n{SEP}")
-print(f"CHECK 2 — other {TARGET_AWARENESS} participants per image")
+print(f"CHECK 2 - other {TARGET_AWARENESS} participants per image")
 print(f"          (images with 0 others fail the MIN_SUBJ={MIN_SUBJ_PER_IMAGE} threshold → dropped)")
 print(SEP)
 
@@ -69,7 +69,7 @@ all_uua = fix[
 ]
 
 if p_fix.empty:
-    print("  Skipped — participant has no qualifying fixations (see Check 1).")
+    print("  Skipped - participant has no qualifying fixations (see Check 1).")
 else:
     rows = []
     for img in sorted(p_images):
@@ -93,7 +93,7 @@ else:
 
 # ── CHECK 3: What CrossResults actually scored for this participant ────────────
 print(f"\n{SEP}")
-print(f"CHECK 3 — images participant {PARTICIPANT_ID} appears in inside CrossResults")
+print(f"CHECK 3 - images participant {PARTICIPANT_ID} appears in inside CrossResults")
 print(f"          (ground truth: what the NSS cache actually computed)")
 print(SEP)
 

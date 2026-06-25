@@ -212,7 +212,7 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
             inside = (h1 >= 1) & (h1 <= H) & (w1 >= 1) & (w1 <= W) # double check if anything falls out of bounds
             n_out = np.sum(~inside)
             if n_out > 0 and DEBUG:
-                print(f"⚠️ [Boundary Filter] Dropped {n_out} out-of-bounds pixels for image: {df_subj['ImageName'].iloc} (Session {df_subj['session'].iloc})")
+                print(f"[Boundary Filter] Dropped {n_out} out-of-bounds pixels for image: {df_subj['ImageName'].iloc} (Session {df_subj['session'].iloc})")
             
             coords.append((np.int32(h1[inside]), np.int32(w1[inside])))
 
@@ -363,7 +363,7 @@ def calculate_WithinPhase_NSS(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdeg
     Results["steNSSSimilarity"]  = ste_
 
     if drop_stats["total_dropped"] > 0:
-        print(f"📊 [Diagnostic] Dropped {drop_stats['total_dropped']} images: "
+        print(f"[Diagnostic] Dropped {drop_stats['total_dropped']} images: "
               f"{drop_stats['insufficient_subjects']} due to subject count threshold.")
         
     return Results
@@ -435,7 +435,7 @@ def calculate_NSS_crossphase(
        
         expected_prefix = "conscious" if cond == "C" else "unconscious"
         if not str(awareness_val).startswith(expected_prefix): #check for mismatch between condition and awareness
-            print(f"[cross] ⚠️ MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
+            print(f"[cross] MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
         
         participant_ids = sorted( # sort by psrticipant ID 
             (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
@@ -744,7 +744,7 @@ if __name__ == "__main__":
 
     matched = df_long['Within-NSS-Typicality'].notna().sum()
     missing = df_long['Within-NSS-Typicality'].isna().sum()
-    print(f"\n📊 [Eccentricity Check] Matched: {matched} | Missing (NaN): {missing}")
+    print(f"\n[Eccentricity Check] Matched: {matched} | Missing (NaN): {missing}")
 
     # find median trial no + label first vs second half of experiment for later analysis
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
@@ -765,4 +765,4 @@ if __name__ == "__main__":
     cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
     df_long_fully_melted.to_csv(cross_long_path, index=False)
 
-    print(f"✅ Saved Cross-Phase LONG Dataset to: {cross_long_path}")
+    print(f"Saved Cross-Phase LONG Dataset to: {cross_long_path}")
