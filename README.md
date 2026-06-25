@@ -6,9 +6,6 @@ files) into cleaned fixation/saccade event tables, then runs **NSS (Normalized
 Scanpath Saliency)** analyses comparing where participants look during the Mooney
 phase vs. the disambiguation phase, split by awareness (PAS score).
 
-This is a research script collection, not a packaged library. There is no test
-suite and no CLI; all real code lives in `RunningScript.py`, `Settings.py`, and
-`Scripts/`.
 
 ## Requirements
 
