@@ -12,15 +12,8 @@ suite and no CLI; all real code lives in `RunningScript.py`, `Settings.py`, and
 
 ## Requirements
 
-- Python 3.14 (see `.python-version`)
-- Environment managed by [uv](https://docs.astral.sh/uv/) (`.venv/`)
 - Core libraries: `pymovements`, `polars` (Stage 1), `pandas`, `numpy`, `scipy`,
   `matplotlib`, `seaborn` (Stage 2)
-
-Run scripts with the virtual environment active, or via `uv run`.
-
-> Note: `pymovements` and `polars` are imported throughout Stage 1 but are not yet
-> declared in `pyproject.toml`. See [Known issues](#known-issues).
 
 ## Pipeline
 
