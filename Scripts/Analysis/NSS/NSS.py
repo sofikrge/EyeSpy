@@ -1,5 +1,3 @@
-# OldNSS.py
-
 """
 NSS (Normalized Scanpath Saliency) Analysis Module for Eye-Gaze Data
 """

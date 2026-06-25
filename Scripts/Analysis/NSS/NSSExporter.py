@@ -1,5 +1,3 @@
-# OldNSSExporter.py
-
 """
 Processes cleaned eye-tracking fixation data from multiple participant CSV files
 and exports consolidated fixation data with image classification.

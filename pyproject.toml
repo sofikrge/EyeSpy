@@ -1,7 +1,7 @@
 [project]
 name = "eyespy"
 version = "0.1.0"
-description = "Add your description here"
+description = "Eye-tracking analysis pipeline for a Mooney-image / disambiguation consciousness experiment (NSS analyses)."
 readme = "README.md"
 authors = [
     { name = "sofikrge", email = "150954568+sofikrge@users.noreply.github.com" }
@@ -15,12 +15,10 @@ dependencies = [
     "seaborn>=0.13.2",
 ]
 
-[project.scripts]
-eyespy = "eyespy:main"
-
-[build-system]
-requires = ["uv_build>=0.11.19,<0.12.0"]
-build-backend = "uv_build"
+# This repo is a collection of analysis scripts, not an installable package,
+# so uv treats it as a non-package project (no build backend / entry point).
+[tool.uv]
+package = false
 
 [dependency-groups]
 dev = [
