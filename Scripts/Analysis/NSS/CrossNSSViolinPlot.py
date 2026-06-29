@@ -24,7 +24,7 @@ from pathlib import Path
 # Toggle which sessions to plot:
 #   True  -> only the unconscious session (Unconscious Aware + Unconscious Unaware)
 #   False -> all three groups (Conscious Aware + both unconscious groups)
-UNCONSCIOUS_ONLY = True
+UNCONSCIOUS_ONLY = False
 
 INPUT_FILE  = Path("analysesresults/NSS/NSS_CrossPhase_LongFormat.csv")
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
