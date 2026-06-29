@@ -124,7 +124,6 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     fix = pd.read_parquet(FIX_FILE)
-    rng = np.random.default_rng(0)
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 13), sharey=True)
 
@@ -167,7 +166,9 @@ def main():
             # --- strip plot ---
             if n_part:
                 y = tbl["left_pct"].to_numpy()
-                x = rng.normal(0, 0.04, size=len(y))
+                # Fresh per-panel RNG so identical data renders identically
+                # (the two unconscious disamb panels are the same session-U data).
+                x = np.random.default_rng(0).normal(0, 0.04, size=len(y))
                 ax.scatter(x, y, s=np.clip(tbl["n"] / 5, 10, 300),
                            alpha=0.6, edgecolor="k", linewidth=0.4)
                 ax.axhline(tbl["left_pct"].mean(), color="blue", linewidth=1,
