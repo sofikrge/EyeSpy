@@ -27,3 +27,6 @@ Figures/
 
 .claude/
 CLAUDE.md
+.DS_Store
+Scripts/.DS_Store
+Scripts/Analysis/.DS_Store
