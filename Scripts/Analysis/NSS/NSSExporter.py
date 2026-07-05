@@ -72,7 +72,10 @@ for filename in files:
 
 # 5. Combine All Data
 print(f"Merging {len(dfs)} participant files...")
-full_df = pl.concat(dfs, how="diagonal_relaxed").with_columns(pl.col("onset").cast(pl.Float64, strict=False))
+full_df = pl.concat(dfs, how="diagonal_relaxed").with_columns([
+    pl.col("onset").cast(pl.Float64, strict=False),
+    pl.col("mooney_start").cast(pl.Float64, strict=False),  # MSG-marker Mooney onset; used for the temporal half split
+])
 
 # 6. Transform & Select
 # Note: 'location' in the CSV is a string like "[12.34, 56.78]".
@@ -109,10 +112,25 @@ export_df = (
           .otherwise(pl.lit(None))
           .alias("image_type")
     ])
+    .with_columns([
+        # --- MOONEY TEMPORAL HALF ---
+        # Split the 3 s Mooney window into two 1.5 s halves by fixation onset,
+        # measured from the true Mooney stimulus onset (mooney_start). A fixation
+        # is assigned by its onset: < 1500 ms -> "Early", else "Late".
+        # Only Mooney fixations get a half; disambiguation rows stay null.
+        pl.when(pl.col("image_type").str.starts_with("mooney"))
+          .then(
+              pl.when((pl.col("onset") - pl.col("mooney_start")) < 1500)
+                .then(pl.lit("Early"))
+                .otherwise(pl.lit("Late"))
+          )
+          .otherwise(pl.lit(None))
+          .alias("Mooney_Half")
+    ])
     .select([
-        "ImageName", "session", "image_type", "participant", 
-        "x_deg_centered", "y_deg", "condition", "trial_number", 
-        "awareness"
+        "ImageName", "session", "image_type", "participant",
+        "x_deg_centered", "y_deg", "condition", "trial_number",
+        "awareness", "Mooney_Half"
     ])
     .drop_nulls(subset=["image_type"])
 )

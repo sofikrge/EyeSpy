@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 CROSS_CSV  = Path("analysesresults/NSS") / "NSS_CrossPhase_LongFormat.csv"
-MIN_IMAGES = 13  # participants below this (per reference map) are flagged
+MIN_IMAGES = 15  # participants below this (per reference map) are flagged
 
 # ── Load and count image entries per participant × awareness × reference map ────
 df = pd.read_csv(CROSS_CSV)

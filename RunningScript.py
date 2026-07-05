@@ -4,13 +4,6 @@ import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
 
-#%% How to use
-"""
-How to use:
-- Type this in the terminal: alias run='python3 RunningScript.py'
-- Type "run" in the terminal 
-"""
-
 #%% Load data
 global dataset
 

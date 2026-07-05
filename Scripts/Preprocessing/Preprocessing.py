@@ -294,6 +294,8 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             "name", "onset", "offset", "duration", "x","y", "dist_from_center",
             "amplitude", "peak_velocity", "dispersion", "disposition",
             "block_type", "BlockNum", "trial_number", "condition", "phase",
+            # mooney_start / mooney_end are the MSG-marker phase boundaries
+            "mooney_start", "mooney_end",
             "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q"
         ]
         missing_cols = {col: pl.lit(None) for col in desired_cols if col not in ev_df.columns}

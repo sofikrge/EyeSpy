@@ -26,6 +26,12 @@ MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects requir
 
 NAN_POLICY_CROSS         = "permissive"  # or "matlab_strict"
 
+# Cross-phase Mooney window treatment:
+#   "whole"  -> score the full 3 s Mooney presentation as one unit (original behaviour)
+#   "halves" -> score each 1.5 s temporal half (Early/Late, from the parquet's
+#               Mooney_Half column) separately against the same whole disamb refs
+MOONEY_SPLIT             = "whole"
+
 DISPERSION_DDOF = 0   # 0 = population sd (spread of present data); set to 1 for sample sd
 
 #%% === LOAD & PREP ===
@@ -391,17 +397,28 @@ def _aggregate_by_policy(subj_scores: list[float], policy: str) -> float:
 def calculate_NSS_crossphase(
     FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegree: float,
     *,image_height: int = IMAGE_HEIGHT,image_width: int = IMAGE_WIDTH,
-    nan_policy: str = "permissive", min_subj_per_image_cross: int = 2):
+    nan_policy: str = "permissive", min_subj_per_image_cross: int = 2,
+    mooney_split: str = "whole"):
     """
     For each Mooney image × condition, compute NSS of Mooney fixations
     against two reference saliency maps from the disambiguation phase:
       - disamb_intact
       - disamb_not_intact (scrambled)
+
+    mooney_split controls how the 3 s Mooney window is scored:
+      "whole"  -> one scoring unit per participant×trial (original behaviour).
+      "halves" -> two units per participant×trial, the Early / Late 1.5 s halves
+                  (from the Mooney_Half column). The disamb reference maps are
+                  built once and are identical across halves.
     """
 
     # verify data integrity
     H, W = int(image_height), int(image_width)
     _validate_nss_inputs(fixations_df)
+    if mooney_split not in ("whole", "halves"):
+        raise ValueError(f"mooney_split must be 'whole' or 'halves', got {mooney_split!r}")
+    if mooney_split == "halves" and "Mooney_Half" not in fixations_df.columns:
+        raise ValueError("mooney_split='halves' needs a 'Mooney_Half' column; re-run NSSExporter.py.")
 
     # set up smoothing parameter and pre calculate disk offsets for later use in scoring
     sigma = SIGMA
@@ -426,45 +443,17 @@ def calculate_NSS_crossphase(
         if not img_type.startswith("mooney_post_intact_"):
             continue
 
-        # fetch all fixations + derive awareness value from image_type
+        # fetch all Mooney fixations for this image + derive awareness from image_type
         awareness_val = img_type.split("mooney_post_intact_")[1]  # e.g. "conscious_aware"
-        df_group = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
-        df_group = df_group[df_group["awareness"] == awareness_val]
-       
+        df_group_all = _group_fixations_for_image(fixations_df, img, cond, "mooney_post_intact")
+        df_group_all = df_group_all[df_group_all["awareness"] == awareness_val]
+
         expected_prefix = "conscious" if cond == "C" else "unconscious"
         if not str(awareness_val).startswith(expected_prefix): #check for mismatch between condition and awareness
             print(f"[cross] MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
-        
-        participant_ids = sorted( # sort by psrticipant ID 
-            (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
-            key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
-        )
-        coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
-        n_subj= len(coords_list)
 
-        if n_subj< int(min_subj_per_image_cross): # if subj copunt too low, adds nan placeholder
-            Results["image"].append({
-                "img": img, "condition": cond, "image_type": "mooney",
-                "subject": [],
-                "NSS_intact_img": float("nan"),
-                "NSS_scrambled_img": float("nan"),
-                "NSS_diff_img": float("nan"),
-                "awareness": awareness_val,
-            })
-            Results["meanNSS_intact_per_image"].append(float("nan"))
-            Results["meanNSS_scrambled_per_image"].append(float("nan"))
-            Results["meanNSS_diff_per_image"].append(float("nan"))
-            per_image_records.append({
-                "img": img, "condition": cond,
-                "NSS_intact_img": float("nan"),
-                "NSS_scrambled_img": float("nan"),
-                "NSS_diff_img": float("nan"),
-                "n_subjects": int(n_subj),
-                "awareness": awareness_val,
-            })
-            continue
-
-        # retrieve ref maps
+        # Reference maps depend only on (image, session) — not on the Mooney fixations —
+        # so retrieve + z-normalize them once and reuse across the temporal half(s) below.
         fm_intact = fm_index.get((img, cond, "disamb_intact"))
         fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
 
@@ -474,7 +463,7 @@ def calculate_NSS_crossphase(
             "scrambled": fm_scrambled["fixMapPerIm"] if fm_scrambled and fm_scrambled.get("fixMapPerIm", None) is not None and len(np.shape(fm_scrambled["fixMapPerIm"])) == 2 else None,
         }
 
-        # Z-normalize references 
+        # Z-normalize references
         zrefs = {}
         for k, ref in ref_maps.items():
             if ref is None:
@@ -483,63 +472,105 @@ def calculate_NSS_crossphase(
                 zref, mu, sd = _z_normalize(np.asarray(ref, dtype=float))
                 zrefs[k] = zref  # None if degenerate
 
-        # Per-subject NSS for each reference
-        subj_out = []
-        subj_scores_intact = []
-        subj_scores_scrambled = []
+        # Scoring units: the whole Mooney window, or its two temporal halves.
+        # "whole" -> one pass with all Mooney fixations (half=None); "halves" ->
+        # one pass per Early/Late half, filtering df_group_all on Mooney_Half.
+        halves = ("Early", "Late") if mooney_split == "halves" else (None,)
+        for half in halves:
+            half_label = half if half is not None else "Whole"
+            df_group = df_group_all if half is None else df_group_all[df_group_all["Mooney_Half"] == half]
 
-        for j in range(n_subj):
-            coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
+            participant_ids = sorted( # sort by participant ID then trial
+                (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
+                key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
+            )
+            coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+            n_subj = len(coords_list)
 
-            nss_intact = _nss_for_subject(zrefs["intact"], coords_j, dy_off, dx_off)
-            nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
-            nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
+            if n_subj < int(min_subj_per_image_cross): # if subj count too low, add nan placeholder
+                Results["image"].append({
+                    "img": img, "condition": cond, "image_type": "mooney",
+                    "subject": [],
+                    "NSS_intact_img": float("nan"),
+                    "NSS_scrambled_img": float("nan"),
+                    "NSS_diff_img": float("nan"),
+                    "awareness": awareness_val,
+                    "mooney_half": half_label,
+                })
+                Results["meanNSS_intact_per_image"].append(float("nan"))
+                Results["meanNSS_scrambled_per_image"].append(float("nan"))
+                Results["meanNSS_diff_per_image"].append(float("nan"))
+                per_image_records.append({
+                    "img": img, "condition": cond,
+                    "NSS_intact_img": float("nan"),
+                    "NSS_scrambled_img": float("nan"),
+                    "NSS_diff_img": float("nan"),
+                    "n_subjects": int(n_subj),
+                    "awareness": awareness_val,
+                    "mooney_half": half_label,
+                })
+                continue
 
-            mooney_subjects = fm_mooney.get("subject", [])
-            subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
+            # Per-subject NSS for each reference
+            subj_out = []
+            subj_scores_intact = []
+            subj_scores_scrambled = []
 
-            subj_out.append({
-                "subjNum": subjnum, 
-                "ParticipantID": participant_ids[j],  # <--- ADD THIS
-                "NSS_intact": nss_intact, 
-                "NSS_scrambled": nss_scram, 
-                "NSS_diff": nss_diff,
+            for j in range(n_subj):
+                coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
+
+                nss_intact = _nss_for_subject(zrefs["intact"], coords_j, dy_off, dx_off)
+                nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
+                nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
+
+                mooney_subjects = fm_mooney.get("subject", [])
+                subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
+
+                subj_out.append({
+                    "subjNum": subjnum,
+                    "ParticipantID": participant_ids[j],
+                    "NSS_intact": nss_intact,
+                    "NSS_scrambled": nss_scram,
+                    "NSS_diff": nss_diff,
+                    "awareness": awareness_val,
+                    "mooney_half": half_label,
+                })
+
+                subj_scores_intact.append(nss_intact)
+                subj_scores_scrambled.append(nss_scram)
+
+            # Per-image aggregation, based on defined policy above
+            img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
+            img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
+            img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
+
+            # Store results
+            Results["image"].append({
+                "img": img,
+                "condition": cond,
+                "image_type": "mooney", # Standardize output type for cross-phase results
+                "subject": subj_out,
+                "NSS_intact_img": img_nss_intact,
+                "NSS_scrambled_img": img_nss_scrambled,
+                "NSS_diff_img": img_nss_diff,
                 "awareness": awareness_val,
+                "mooney_half": half_label,
             })
 
-            subj_scores_intact.append(nss_intact)
-            subj_scores_scrambled.append(nss_scram)
+            Results["meanNSS_intact_per_image"].append(img_nss_intact)
+            Results["meanNSS_scrambled_per_image"].append(img_nss_scrambled)
+            Results["meanNSS_diff_per_image"].append(img_nss_diff)
 
-        # Per-image aggregation, basedo n defined policy above
-        img_nss_intact    = _aggregate_by_policy(subj_scores_intact, nan_policy)
-        img_nss_scrambled = _aggregate_by_policy(subj_scores_scrambled, nan_policy)
-        img_nss_diff      = img_nss_intact - img_nss_scrambled if np.isfinite(img_nss_intact) and np.isfinite(img_nss_scrambled) else float("nan")
-
-        # Store results
-        Results["image"].append({
-            "img": img,
-            "condition": cond,
-            "image_type": "mooney", # Standardize output type for cross-phase results
-            "subject": subj_out,
-            "NSS_intact_img": img_nss_intact,
-            "NSS_scrambled_img": img_nss_scrambled,
-            "NSS_diff_img": img_nss_diff,
-            "awareness": awareness_val,
-        })
-
-        Results["meanNSS_intact_per_image"].append(img_nss_intact)
-        Results["meanNSS_scrambled_per_image"].append(img_nss_scrambled)
-        Results["meanNSS_diff_per_image"].append(img_nss_diff)
-
-        per_image_records.append({
-            "img": img,
-            "condition": cond,
-            "NSS_intact_img": img_nss_intact,
-            "NSS_scrambled_img": img_nss_scrambled,
-            "NSS_diff_img": img_nss_diff,
-            "n_subjects": int(n_subj),
-            "awareness": awareness_val,
-        })
+            per_image_records.append({
+                "img": img,
+                "condition": cond,
+                "NSS_intact_img": img_nss_intact,
+                "NSS_scrambled_img": img_nss_scrambled,
+                "NSS_diff_img": img_nss_diff,
+                "n_subjects": int(n_subj),
+                "awareness": awareness_val,
+                "mooney_half": half_label,
+            })
 
     n_total = len(Results["image"])
     n_valid_i = sum(np.isfinite(r["NSS_intact_img"]) for r in Results["image"])
@@ -636,9 +667,10 @@ if __name__ == "__main__":
     # cache setup for cross-phase
     cross_cache_path = OUTPUT_DIR / "NSS_crossphase_descriptives.pkl"
     cross_meta  = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition"),
-                          tag="calculate_NSS_crossphase:v2_cross_session",  # ← Changed version tag
+                          tag="calculate_NSS_crossphase:v3_mooney_split",  # ← Changed version tag
                           extra={"nan_policy": str(NAN_POLICY_CROSS),
-                                 "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS)})
+                                 "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS),
+                                 "mooney_split": str(MOONEY_SPLIT)})
     
     # try loading cache
     try:
@@ -656,7 +688,8 @@ if __name__ == "__main__":
             pixels_per_vdegree=ppd,
             image_height=IMAGE_HEIGHT,image_width=IMAGE_WIDTH,
             nan_policy=str(NAN_POLICY_CROSS),
-            min_subj_per_image_cross=int(MIN_SUBJ_PER_IMAGE_CROSS))
+            min_subj_per_image_cross=int(MIN_SUBJ_PER_IMAGE_CROSS),
+            mooney_split=str(MOONEY_SPLIT))
         # save results + cache
         with open(cross_cache_path, "wb") as f:
             pickle.dump({"meta": cross_meta, "data": CrossResults}, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -734,6 +767,7 @@ if __name__ == "__main__":
                     'NSS_Scrambled': subj['NSS_scrambled'],
                     'Awareness': img_data['awareness'],
                     'Trial': subj['ParticipantID'].split('_t')[1],
+                    'Mooney_Half': subj.get('mooney_half', 'Whole'),
                     'Within-NSS-Typicality': disamb_lookup.get((subj['ParticipantID'].split('_t')[0], image_name, session), np.nan),
                 })
 
@@ -752,7 +786,7 @@ if __name__ == "__main__":
 
     # Long format sasving
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Within-NSS-Typicality'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Mooney_Half', 'Within-NSS-Typicality'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
