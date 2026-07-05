@@ -14,16 +14,11 @@ Plot:
                     they form a single vertical line within each half-violin.
 """
 
-import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root, for nss_paths
-import nss_paths
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
 # === CONFIG ===
 # Toggle which sessions to plot:
@@ -31,7 +26,10 @@ _P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 #   False -> all three groups (Conscious Aware + both unconscious groups)
 UNCONSCIOUS_ONLY = True
 
-INPUT_FILE  = _P["CROSS_CSV"]
+# Whole-window plot (awareness x Intact/Scrambled) — it has no Early/Late dimension,
+# so it always reads the whole-mode cross-phase results. The halves comparison has its
+# own plot (CrossNSSHalvesLinePlot.py).
+INPUT_FILE  = Path("analysesresults/NSS_whole/NSS_CrossPhase_LongFormat.csv")
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PLOT = OUTPUT_DIR / (
     "NSS_CrossPhase_Violin_byAwareness_unconsciousOnly.png"

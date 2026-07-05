@@ -19,7 +19,6 @@ Run AFTER NSS.py has produced the cached pickles.
 """
 
 import pickle
-import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -27,18 +26,15 @@ import matplotlib.image as mpimg
 from pathlib import Path
 from scipy.fft import fft2, ifft2
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root, for nss_paths
-import nss_paths
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
-
 # ============================================================================
 # CONFIGURATION - Settings you might need to change
 # ============================================================================
 
 # 1. Where to find the data and save the plots
-BASE_PATH = _P["SHARED_DIR"]
-STATS_PATH = _P["CROSS_PKL"]        # Cross-phase scores (ranking + DV) — per-mode folder
-MAPS_PATH = _P["FIXMAPS_PKL"]       # Pre-blurred reference saliency maps — shared
+# Whole-window visualization (ranks images by NSS_diff, overlays Mooney fixations) —
+# no Early/Late dimension, so it always reads the whole-mode cross-phase results.
+STATS_PATH = Path("analysesresults/NSS_whole") / "NSS_crossphase_descriptives.pkl"  # Cross-phase scores (ranking + DV)
+MAPS_PATH = Path("analysesresults/NSS") / "FixMaps_full.pkl"                         # Pre-blurred reference saliency maps (shared)
 FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")     # Raw fixations (for the overlay points)
 OUTPUT_DIR = Path("Figures/nss_separated_analyses/MooneysOnDisamb")  # Where images will be saved
 
