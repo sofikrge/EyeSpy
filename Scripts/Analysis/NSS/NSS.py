@@ -14,7 +14,7 @@ import zlib
 #%% === CONFIG ===
 FIX_FILE            = Path("data/NSS_all_fixations_clean.parquet")
 # Output paths and the Mooney-split choice are resolved at runtime via
-# nss_paths.select() in __main__ (prompt or $MOONEY_SPLIT).
+# nss_paths.select() in __main__ (prompt or $MOONEY_SPLIT).h
 IMAGE_HEIGHT        = 600
 IMAGE_WIDTH         = 800
 DEBUG               = True
@@ -551,11 +551,8 @@ def calculate_NSS_crossphase(
                 nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
                 nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
 
-                # Positional index of this scoring unit (participant×trial×half).
-                # Deliberately NOT taken from the Mooney FixMap's subject list — that
-                # list is per-participant and unfiltered by half, so it isn't aligned
-                # with these units. ParticipantID (below) is the real identifier.
-                subjnum = j + 1
+                mooney_subjects = fm_mooney.get("subject", [])
+                subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
 
                 subj_out.append({
                     "subjNum": subjnum,
@@ -826,22 +823,9 @@ if __name__ == "__main__":
 
     # find median trial no + label first vs second half of experiment for later analysis
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
-    # Compute each participant's median trial on their UNIQUE trials, so the split
-    # can't be tilted by a trial appearing a different number of times. In halves
-    # mode a trial yields up to two rows (Early/Late) that may survive the subject
-    # cutoff unevenly; deduplicating first keeps the median stable. In whole mode
-    # each (Participant, Session, Trial) is already unique, so this is a no-op there
-    # and leaves whole-mode Experiment_Half labels unchanged.
-    median_trial = (
-        df_long.drop_duplicates(['Participant', 'Session', 'Trial'])
-               .groupby(['Participant', 'Session'])['Trial'].median()
-               .rename('median_trial')
+    df_long['Experiment_Half'] = df_long.groupby(['Participant', 'Session'])['Trial'].transform(
+        lambda x: np.where(x <= x.median(), 'First_Half', 'Second_Half')
     )
-    df_long = df_long.merge(median_trial, on=['Participant', 'Session'], how='left')
-    df_long['Experiment_Half'] = np.where(
-        df_long['Trial'] <= df_long['median_trial'], 'First_Half', 'Second_Half'
-    )
-    df_long = df_long.drop(columns='median_trial')
 
     # Long format sasving
     df_long_fully_melted = df_long.melt(
