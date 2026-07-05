@@ -193,21 +193,30 @@ def _group_fixations_for_image(fixations_df: pd.DataFrame, img: Any, cond: Any, 
     return fixations_df.query(
         "ImageName == @img and session == @cond and image_type == @img_type")
 
-def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H: int, W: int):
-    """Return list of (h1,w1) per subject, ordered by participant to match FixMaps"""
+def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H: int, W: int,
+                             return_keys: bool = False):
+    """Return list of (h1,w1) per scoring unit, one per (participant, trial).
+
+    Units are ordered by (participant, trial_number) lexically. If return_keys is
+    True, also return a parallel list of (participant_str, trial_number) keys so the
+    caller can pair each coords unit with the participant/trial it belongs to (used
+    by within-phase to map each viewing back to its participant's LOSO map).
+    """
     coords = []
+    keys = []
     if df_group.empty:
-        return coords
+        return (coords, keys) if return_keys else coords
 
     # order by participant as string to ensure consistent ordering with FixMaps
     dfg = df_group.assign(participant_str=df_group["participant"].astype(str)).sort_values(["participant_str", "trial_number"])
     g = dfg.groupby(["participant_str", "trial_number"], dropna=False)
 
-    for _, df_subj in g:
+    for (participant_str, trial_number), df_subj in g:
+        keys.append((participant_str, trial_number))
         xdeg = pd.to_numeric(df_subj["x_deg_centered"], errors="coerce").to_numpy()
         ydeg = pd.to_numeric(df_subj["y_deg"],          errors="coerce").to_numpy()
         ok = np.isfinite(xdeg) & np.isfinite(ydeg)
-        # Translate into screen pixel matrices 
+        # Translate into screen pixel matrices
         if ok.any():
             h1, w1 = _deg_to_image_pixels(
                 x_deg=xdeg[ok], y_deg=ydeg[ok],
@@ -217,12 +226,12 @@ def _coords_in_fixmaps_order(df_group: pd.DataFrame,pixels_per_vdegree: float,H:
             n_out = np.sum(~inside)
             if n_out > 0 and DEBUG:
                 print(f"[Boundary Filter] Dropped {n_out} out-of-bounds pixels for image: {df_subj['ImageName'].iloc} (Session {df_subj['session'].iloc})")
-            
+
             coords.append((np.int32(h1[inside]), np.int32(w1[inside])))
 
         else:
             coords.append((np.array([], np.int32), np.array([], np.int32))) # dummy allocation for dead cells, empty arrays
-    return coords
+    return (coords, keys) if return_keys else coords
 
 def _stack_subject_maps(subjects: list[dict], H: int, W: int) -> np.ndarray:
     """Reconstructs compressed subject maps into a 3D array (n_subjects, H, W)"""
@@ -330,24 +339,37 @@ def calculate_WithinPhase_NSS(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdeg
             if awareness_val:
                 df_group = df_group[df_group["awareness"] == awareness_val]
 
-            participant_ids = sorted(df_group["participant"].astype(str).unique())
-            coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+            # One scoring unit per (participant, trial) so repeat viewings of the same
+            # image are scored separately. coords_units[u] pairs with unit_keys[u].
+            coords_units, unit_keys = _coords_in_fixmaps_order(
+                df_group, pixels_per_vdegree, H, W, return_keys=True)
 
+            # subjects (and blurred[j]) are per participant, in FixMaps order — map each
+            # participant to its subject-map index so every viewing can be scored against
+            # that participant's LOSO map (whole participant left out, both viewings).
+            subj_pids = [str(s.get("ParticipantID")) for s in subjects]
+            pid_to_j = {pid: jj for jj, pid in enumerate(subj_pids)}
+
+            zmap_cache = {}  # participant index -> LOSO z-map (reused across their viewings)
             subj_scores = []
-            for j in range(n): 
-                # then LOSO logic -> saliency map without participant j
-                loso = _compute_loso(sum_blur, blurred, j)
-                zmap, _, _ = _z_normalize(loso)
+            for (pid, trial), coords_u in zip(unit_keys, coords_units):
+                j = pid_to_j.get(str(pid))
+                if j is None:
+                    continue  # viewing with no matching subject map (should not happen); skip
 
-                # Scoring
-                coords_j = coords_list[j] if j < len(coords_list) else (np.array([], np.int32), np.array([], np.int32))
-                nss_j = _nss_for_subject(zmap, coords_j, dy_off, dx_off)
+                if j not in zmap_cache:
+                    # LOSO map without participant j (removes both of their viewings)
+                    loso = _compute_loso(sum_blur, blurred, j)
+                    zmap_cache[j], _, _ = _z_normalize(loso)
+
+                nss_u = _nss_for_subject(zmap_cache[j], coords_u, dy_off, dx_off)
                 out["subject"].append({
                     "subjNum": subjects[j].get("subjNum", j + 1),
-                    "ParticipantID": participant_ids[j], 
-                    "NSSSimPerSubj": nss_j # final score of that participant for that image 
+                    "ParticipantID": pid,
+                    "Trial": trial,        # which viewing this score is for
+                    "NSSSimPerSubj": nss_u # this viewing's score for this image
                 })
-                subj_scores.append(nss_j)
+                subj_scores.append(nss_u)
 
             img_mean = _aggregate_image_scores(subj_scores)
             Results["image"].append(out)
@@ -480,9 +502,14 @@ def calculate_NSS_crossphase(
             half_label = half if half is not None else "Whole"
             df_group = df_group_all if half is None else df_group_all[df_group_all["Mooney_Half"] == half]
 
-            participant_ids = sorted( # sort by participant ID then trial
+            # These labels are paired positionally with coords_list from
+            # _coords_in_fixmaps_order, which groups by (participant, trial_number) with
+            # pandas' default LEXICAL sort (trial_number is a string). So sort trial the
+            # same lexical way here — an int() sort would mis-pair labels to coords for
+            # participants with repeat trials on one image (e.g. trials "2" vs "10").
+            participant_ids = sorted( # sort by participant ID then trial (lexical, to match coords)
                 (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
-                key=lambda x: (x.split('_t')[0], int(x.split('_t')[1]))
+                key=lambda x: (x.split('_t')[0], x.split('_t')[1])
             )
             coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
             n_subj = len(coords_list)
@@ -624,7 +651,7 @@ if __name__ == "__main__":
     # --- Within Phase NSS calculation ---
     nss_cache_path = OUTPUT_DIR / "NSS_WithinPhase.pkl"
     nss_meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"),
-                          tag="calculate_NSS_similarity:v3_awareness_split",
+                          tag="calculate_NSS_similarity:v4_per_viewing",  # per-(participant,trial) scoring
                           extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS)})
 
     # Open NSS cache, if meta matches, otherwise force recomputation
@@ -730,6 +757,7 @@ if __name__ == "__main__":
                     'Image': image_name,
                     'Session': session,
                     'ImageType': img_type.split("_conscious")[0].split("_unconscious")[0],
+                    'Trial': subj.get('Trial'),   # which viewing this score is for
                     'NSS': subj['NSSSimPerSubj'],
                     'Awareness': img_data.get('awareness', None),
                 })
@@ -745,12 +773,15 @@ if __name__ == "__main__":
     # ==========================================
     print("\n   Creating Participant-Level Dataset for Jamovi...")
 
+    # Typicality = the participant's within-phase disamb_intact score for this viewing.
+    # Keyed per (participant, image, session, trial) so each Mooney viewing is paired
+    # with the disambiguator-phase typicality of the SAME trial.
     disamb_lookup = {}
     for img_data in NSSResults['image']:
         if img_data.get('image_type') == 'disamb_intact':
             for subj in img_data['subject']:
                 if 'ParticipantID' in subj:
-                    disamb_lookup[(subj['ParticipantID'], img_data['img'], img_data['condition'])] = subj['NSSSimPerSubj']
+                    disamb_lookup[(subj['ParticipantID'], img_data['img'], img_data['condition'], str(subj.get('Trial')))] = subj['NSSSimPerSubj']
 
     # Flatten
     flat_data = []
@@ -759,16 +790,18 @@ if __name__ == "__main__":
         image_name = img_data['img']
         for subj in img_data['subject']:
             if 'ParticipantID' in subj:
+                pid_only = subj['ParticipantID'].split('_t')[0]
+                trial_only = subj['ParticipantID'].split('_t')[1]
                 flat_data.append({
-                    'Participant': subj['ParticipantID'].split('_t')[0],
+                    'Participant': pid_only,
                     'Image': image_name,
                     'Session': session,
                     'NSS_Intact': subj['NSS_intact'],
                     'NSS_Scrambled': subj['NSS_scrambled'],
                     'Awareness': img_data['awareness'],
-                    'Trial': subj['ParticipantID'].split('_t')[1],
+                    'Trial': trial_only,
                     'Mooney_Half': subj.get('mooney_half', 'Whole'),
-                    'Within-NSS-Typicality': disamb_lookup.get((subj['ParticipantID'].split('_t')[0], image_name, session), np.nan),
+                    'Within-NSS-Typicality': disamb_lookup.get((pid_only, image_name, session, trial_only), np.nan),
                 })
 
     # convert to pandas
