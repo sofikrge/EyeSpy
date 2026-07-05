@@ -503,16 +503,13 @@ def calculate_NSS_crossphase(
             half_label = half if half is not None else "Whole"
             df_group = df_group_all if half is None else df_group_all[df_group_all["Mooney_Half"] == half]
 
-            # These labels are paired positionally with coords_list from
-            # _coords_in_fixmaps_order, which groups by (participant, trial_number) with
-            # pandas' default LEXICAL sort (trial_number is a string). So sort trial the
-            # same lexical way here — an int() sort would mis-pair labels to coords for
-            # participants with repeat trials on one image (e.g. trials "2" vs "10").
-            participant_ids = sorted( # sort by participant ID then trial (lexical, to match coords)
-                (df_group["participant"].astype(str) + "_t" + df_group["trial_number"].astype(str)).unique(),
-                key=lambda x: (x.split('_t')[0], x.split('_t')[1])
-            )
-            coords_list = _coords_in_fixmaps_order(df_group, pixels_per_vdegree, H, W)
+            # Take the (participant, trial) keys straight from _coords_in_fixmaps_order
+            # so each label is paired with its own coords unit by construction — no
+            # parallel sort to keep in lockstep (which would silently mis-pair repeat
+            # trials if trial_number ever stopped sorting lexically).
+            coords_list, unit_keys = _coords_in_fixmaps_order(
+                df_group, pixels_per_vdegree, H, W, return_keys=True)
+            participant_ids = [f"{pid}_t{trial}" for pid, trial in unit_keys]
             n_subj = len(coords_list)
 
             if n_subj < int(min_subj_per_image_cross): # if subj count too low, add nan placeholder
@@ -551,11 +548,11 @@ def calculate_NSS_crossphase(
                 nss_scram  = _nss_for_subject(zrefs["scrambled"], coords_j, dy_off, dx_off)
                 nss_diff   = nss_intact - nss_scram if np.isfinite(nss_intact) and np.isfinite(nss_scram) else float("nan")
 
-                mooney_subjects = fm_mooney.get("subject", [])
-                subjnum = mooney_subjects[j].get("subjNum", j + 1) if j < len(mooney_subjects) else (j + 1)
-
+                # Cosmetic display index only (ParticipantID is the real key). The
+                # FixMaps subject list is per-participant, but j indexes per (participant,
+                # trial) units, so don't look subjNum up there — just number the units.
                 subj_out.append({
-                    "subjNum": subjnum,
+                    "subjNum": j + 1,
                     "ParticipantID": participant_ids[j],
                     "NSS_intact": nss_intact,
                     "NSS_scrambled": nss_scram,

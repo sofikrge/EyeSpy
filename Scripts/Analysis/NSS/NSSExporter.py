@@ -120,7 +120,11 @@ export_df = (
         # Only Mooney fixations get a half; disambiguation rows stay null.
         pl.when(pl.col("image_type").str.starts_with("mooney"))
           .then(
-              pl.when((pl.col("onset") - pl.col("mooney_start")) < 1500)
+              # Guard a null mooney_start explicitly: without this it would fall through
+              # to "Late" (null < 1500 is null -> otherwise) and hide a missing onset.
+              pl.when(pl.col("mooney_start").is_null())
+                .then(pl.lit("Unknown"))
+                .when((pl.col("onset") - pl.col("mooney_start")) < 1500)
                 .then(pl.lit("Early"))
                 .otherwise(pl.lit("Late"))
           )
@@ -137,6 +141,10 @@ export_df = (
 
 # 7. Save
 export_df.write_parquet(OUTPUT_FILE)
+
+n_unknown = export_df.filter(pl.col("Mooney_Half") == "Unknown").height
+if n_unknown:
+    print(f"WARNING: {n_unknown} Mooney fixations have a null mooney_start (Mooney_Half='Unknown').")
 
 print(f"Success! Exported {len(export_df)} rows to: {OUTPUT_FILE}")
 print(export_df.head(5))
