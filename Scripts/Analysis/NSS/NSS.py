@@ -13,7 +13,8 @@ import zlib
 
 #%% === CONFIG ===
 FIX_FILE            = Path("data/NSS_all_fixations_clean.parquet")
-OUTPUT_DIR          = Path("analysesresults/NSS") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# Output paths and the Mooney-split choice are resolved at runtime via
+# nss_paths.select() in __main__ (prompt or $MOONEY_SPLIT).
 IMAGE_HEIGHT        = 600
 IMAGE_WIDTH         = 800
 DEBUG               = True
@@ -26,11 +27,11 @@ MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects requir
 
 NAN_POLICY_CROSS         = "permissive"  # or "matlab_strict"
 
-# Cross-phase Mooney window treatment:
+# Cross-phase Mooney window treatment (chosen at runtime by nss_paths.select()):
 #   "whole"  -> score the full 3 s Mooney presentation as one unit (original behaviour)
 #   "halves" -> score each 1.5 s temporal half (Early/Late, from the parquet's
 #               Mooney_Half column) separately against the same whole disamb refs
-MOONEY_SPLIT             = "whole"
+# Each mode writes to its own analysesresults/NSS_<mode>/ folder so runs never overwrite.
 
 DISPERSION_DDOF = 0   # 0 = population sd (spread of present data); set to 1 for sample sd
 
@@ -616,12 +617,21 @@ def calculate_NSS_crossphase(
 
 #%% === MAIN ===
 if __name__ == "__main__":
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
+    # Pick the Mooney-window mode (prompt or $MOONEY_SPLIT) and resolve output paths.
+    # FixMaps + within-phase are shared across modes; cross-phase outputs go to
+    # analysesresults/NSS_<mode>/ so whole and halves runs never overwrite each other.
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+    import nss_paths
+    _P = nss_paths.select()
+    MOONEY_SPLIT = _P["MOONEY_SPLIT"]
+    OUTPUT_DIR = _P["OUTPUT_DIR"]
+    _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
+
     # ---- Build fixmaps ----
     fixations = load_fixations()
-    ppd = MASK_PPD 
-    cache_path = OUTPUT_DIR / "FixMaps_full.pkl"
+    ppd = MASK_PPD
+    cache_path = _P["FIXMAPS_PKL"]  # shared
     meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v3_awareness_split")
 
     # Open Fixmaps (heatmaps) cache
@@ -649,7 +659,7 @@ if __name__ == "__main__":
     print(f"Ready: {len(FixMaps)} images in FixMaps.")
 
     # --- Within Phase NSS calculation ---
-    nss_cache_path = OUTPUT_DIR / "NSS_WithinPhase.pkl"
+    nss_cache_path = _P["WITHIN_PKL"]  # shared
     nss_meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"),
                           tag="calculate_NSS_similarity:v4_per_viewing",  # per-(participant,trial) scoring
                           extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS)})
@@ -692,7 +702,7 @@ if __name__ == "__main__":
     
     # --- NSS cross-phase calculation ---
     # cache setup for cross-phase
-    cross_cache_path = OUTPUT_DIR / "NSS_crossphase_descriptives.pkl"
+    cross_cache_path = _P["CROSS_PKL"]  # per-mode
     cross_meta  = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition"),
                           tag="calculate_NSS_crossphase:v3_mooney_split",  # ← Changed version tag
                           extra={"nan_policy": str(NAN_POLICY_CROSS),
@@ -764,7 +774,7 @@ if __name__ == "__main__":
 
     if w_flat: # convert to pandas dataframe
         df_w_long = pd.DataFrame(w_flat)
-        long_csv_path = OUTPUT_DIR / "NSS_WithinPhase_LongFormat.csv"
+        long_csv_path = _P["WITHIN_CSV"]  # shared
         df_w_long.to_csv(long_csv_path, index=False)
         print(f"Saved Within-Phase LONG Dataset to: {long_csv_path}")
         
@@ -827,7 +837,7 @@ if __name__ == "__main__":
     # Clean the names 
     df_long_fully_melted['ReferenceMap'] = df_long_fully_melted['ReferenceMap'].str.replace('NSS_', '')
 
-    cross_long_path = OUTPUT_DIR / "NSS_CrossPhase_LongFormat.csv"
+    cross_long_path = _P["CROSS_CSV"]  # per-mode
     df_long_fully_melted.to_csv(cross_long_path, index=False)
 
     print(f"Saved Cross-Phase LONG Dataset to: {cross_long_path}")

@@ -11,17 +11,26 @@ compared in the mixed model.
 The original `Within-NSS-Typicality` column is left unchanged.
 """
 
+import sys
+from pathlib import Path
 import pandas as pd
 
-IN_PATH = "analysesresults/NSS/NSS_CrossPhase_LongFormat.csv"
-OUT_PATH = "analysesresults/NSS/NSS_CrossPhase_LongFormat_centred.csv"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+import nss_paths
+
+_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+IN_PATH = _P["CROSS_CSV"]
+OUT_PATH = _P["CROSS_CENTRED_CSV"]
 COL = "Within-NSS-Typicality"
 
 df = pd.read_csv(IN_PATH)
 
-# Compute the group means on unique participant x image x session cells so the
-# duplicated Intact/Scrambled reference rows don't double-weight the averages.
-cells = df.dropna(subset=[COL]).drop_duplicates(["Participant", "Image", "Session"])
+# Compute the group means on unique participant x image x session x trial cells.
+# Typicality is per viewing (constant within a trial), so dedup on Trial too: this
+# collapses the duplicated Intact/Scrambled reference rows (and, in halves mode, the
+# Early/Late rows) that share a value, while keeping each repeat viewing's distinct
+# typicality as its own observation.
+cells = df.dropna(subset=[COL]).drop_duplicates(["Participant", "Image", "Session", "Trial"])
 
 grand = cells[COL].mean()
 ppt_mean = cells.groupby("Participant")[COL].mean()

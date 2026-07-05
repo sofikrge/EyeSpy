@@ -13,10 +13,14 @@ Requires: analysesresults/NSS/NSS_crossphase_descriptives.pkl  (produced by NSS.
 
 from pathlib import Path
 import pickle
+import sys
 import pandas as pd
 
-NSS_DIR         = Path("analysesresults/NSS")
-CROSS_CACHE     = NSS_DIR / "NSS_crossphase_descriptives.pkl"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+import nss_paths
+_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+
+CROSS_CACHE     = _P["CROSS_PKL"]
 TARGET_AWARENESS = "unconscious_unaware"
 
 # ── Load cross-phase results ───────────────────────────────────────────────────

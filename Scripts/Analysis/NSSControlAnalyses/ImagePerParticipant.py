@@ -13,10 +13,15 @@ fewer than MIN_IMAGES entries (per reference map) with a "<--" marker.
 Requires: analysesresults/NSS/NSS_CrossPhase_LongFormat.csv  (produced by NSS.py)
 """
 
+import sys
 from pathlib import Path
 import pandas as pd
 
-CROSS_CSV  = Path("analysesresults/NSS") / "NSS_CrossPhase_LongFormat.csv"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+import nss_paths
+_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+
+CROSS_CSV  = _P["CROSS_CSV"]
 MIN_IMAGES = 15  # participants below this (per reference map) are flagged
 
 # ── Load and count image entries per participant × awareness × reference map ────

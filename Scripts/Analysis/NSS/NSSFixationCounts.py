@@ -31,14 +31,19 @@ Requires:
 """
 
 import pickle
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+import nss_paths
+_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+
 # === CONFIG (must match NSS.py) ===
 FIX_FILE     = Path("data/NSS_all_fixations_clean.parquet")
-CROSS_PKL    = Path("analysesresults/NSS/NSS_crossphase_descriptives.pkl")
+CROSS_PKL    = _P["CROSS_PKL"]
 IMAGE_HEIGHT = 600
 IMAGE_WIDTH  = 800
 MASK_PPD     = 48.55

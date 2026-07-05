@@ -17,13 +17,18 @@ Requires:
 
 from pathlib import Path
 import pickle
+import sys
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+import nss_paths
+_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 PARTICIPANT_ID       = "108"                  # participant to inspect (as string)
 MIN_SUBJ_PER_IMAGE   = 2                    # must match NSS.py setting
 FIX_FILE             = Path("data/NSS_all_fixations_clean.parquet")
-CROSS_CACHE          = Path("analysesresults/NSS/NSS_crossphase_descriptives.pkl")
+CROSS_CACHE          = _P["CROSS_PKL"]
 TARGET_AWARENESS     = "unconscious_unaware"
 TARGET_IMAGE_TYPE    = "mooney_post_intact"
 # ─────────────────────────────────────────────────────────────────────────────

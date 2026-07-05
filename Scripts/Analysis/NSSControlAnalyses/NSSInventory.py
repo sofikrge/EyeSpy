@@ -3,10 +3,15 @@
 
 from pathlib import Path
 import pickle
+import sys
 import numpy as np
 import pandas as pd
 
-NSS_DIR   = Path("analysesresults/NSS")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
+import nss_paths
+_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+
+NSS_DIR   = _P["SHARED_DIR"]   # FixMaps + within-phase (mode-independent)
 FIX_FILE  = Path("data/NSS_all_fixations_clean.parquet")
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2
@@ -16,7 +21,7 @@ MIN_SUBJ_PER_IMAGE_CROSS = 2
 fixations   = pd.read_parquet(FIX_FILE)
 FixMaps     = pickle.load(open(NSS_DIR / "FixMaps_full.pkl",              "rb"))["data"]
 NSSResults  = pickle.load(open(NSS_DIR / "NSS_WithinPhase.pkl",           "rb"))["data"]
-CrossResults= pickle.load(open(NSS_DIR / "NSS_crossphase_descriptives.pkl","rb"))["data"]
+CrossResults= pickle.load(open(_P["CROSS_PKL"],                           "rb"))["data"]
 
 print("=" * 60)
 print("1. FIXMAP INVENTORY")
