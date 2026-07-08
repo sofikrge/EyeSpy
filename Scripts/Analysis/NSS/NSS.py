@@ -848,9 +848,16 @@ if __name__ == "__main__":
     )
     df_long = df_long.drop(columns='median_trial')
 
+    # Block label from the exporter's +300 Extra-block renumbering (Experiment 1-133,
+    # Extra 301-452): lets Jamovi filter to one block or use it as a covariate. The
+    # disambiguator reference maps pool both blocks (keyed by session, not block), so
+    # both viewings are scored against the same reference and any Block difference in
+    # NSS reflects the Mooney gaze, not the reference.
+    df_long['Block'] = np.where(df_long['Trial'] > 300, 'Extra', 'Experiment')
+
     # Long format sasving
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Mooney_Half', 'Within-NSS-Typicality'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Mooney_Half', 'Block', 'Within-NSS-Typicality'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
