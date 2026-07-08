@@ -26,8 +26,8 @@ from pathlib import Path
 #   False -> all three groups (Conscious Aware + both unconscious groups)
 UNCONSCIOUS_ONLY = True
 
-# Trial set: [a]ll trials or [e]xperiment-block only (prompt, or $TRIAL_SET env var).
-# Picks which whole-mode results folder is read (NSS_whole / NSS_whole_exponly).
+# Trial set: [a]ll / [e]xperiment-block only / e[x]tra-block only (prompt, or $TRIAL_SET env var).
+# Picks which whole-mode results folder is read (NSS_whole / NSS_whole_exponly / NSS_whole_extraonly).
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root, for nss_paths
 import nss_paths
@@ -38,7 +38,7 @@ TRIAL_SET = nss_paths.ask_trial_set()
 # own plot (CrossNSSHalvesLinePlot.py).
 INPUT_FILE  = nss_paths.paths_for("whole", TRIAL_SET)["CROSS_CSV"]
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-_SUFFIX = "" if TRIAL_SET == "all" else "_exponly"
+_SUFFIX = nss_paths.TRIAL_SET_SUFFIX[TRIAL_SET]
 OUTPUT_PLOT = OUTPUT_DIR / (
     f"NSS_CrossPhase_Violin_byAwareness_unconsciousOnly{_SUFFIX}.png"
     if UNCONSCIOUS_ONLY else

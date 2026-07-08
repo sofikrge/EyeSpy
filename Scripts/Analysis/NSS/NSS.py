@@ -627,9 +627,9 @@ if __name__ == "__main__":
     _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
 
     # ---- Build fixmaps ----
-    # In trial_set="experiment" the Extra block is dropped up front, so fixmaps,
-    # within-phase and cross-phase all use Experiment-block fixations only
-    # (outputs go to the _exponly folders resolved by nss_paths).
+    # A single-block trial set (trial_set="experiment" or "extra") drops the other
+    # block up front, so fixmaps, within-phase and cross-phase all use that one
+    # block's fixations only (outputs go to the suffixed folders resolved by nss_paths).
     fixations = nss_paths.filter_trial_set(load_fixations(), TRIAL_SET)
     ppd = MASK_PPD
     cache_path = _P["FIXMAPS_PKL"]  # shared

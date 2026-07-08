@@ -7,7 +7,8 @@ and once for the trial set ("all" or "experiment"-block-only trials), so you can
 never run a script against the wrong version by forgetting a setting.
 
 Folder layout (relative to the project root, where these scripts are run from).
-<suffix> is "" for trial_set=all and "_exponly" for trial_set=experiment:
+<suffix> is "" for trial_set=all, "_exponly" for trial_set=experiment and
+"_extraonly" for trial_set=extra:
 
     analysesresults/NSS<suffix>/            shared across Mooney modes
         FixMaps_full.pkl
@@ -25,8 +26,8 @@ trials are dropped entirely), so *everything* — FixMaps, within-phase and
 cross-phase — is versioned by it.
 
 Non-interactive override: set the MOONEY_SPLIT ("whole"/"halves") and TRIAL_SET
-("all"/"experiment") environment variables to skip the prompts (handy for
-scripted/batch runs).
+("all"/"experiment"/"extra") environment variables to skip the prompts (handy
+for scripted/batch runs).
 """
 
 from pathlib import Path
@@ -34,7 +35,11 @@ import os
 import sys
 
 VALID = ("whole", "halves")
-VALID_TRIAL_SET = ("all", "experiment")
+VALID_TRIAL_SET = ("all", "experiment", "extra")
+
+# Folder suffix per trial set (single source of truth — used both to resolve
+# output paths and to name plot files, so the two never drift apart).
+TRIAL_SET_SUFFIX = {"all": "", "experiment": "_exponly", "extra": "_extraonly"}
 
 
 def _no_tty_exit(var: str, values: tuple) -> None:
@@ -62,7 +67,7 @@ def ask_mooney_split() -> str:
 
 
 def ask_trial_set() -> str:
-    """Return "all"/"experiment" from $TRIAL_SET if set, otherwise prompt the user."""
+    """Return "all"/"experiment"/"extra" from $TRIAL_SET if set, otherwise prompt the user."""
     env = os.environ.get("TRIAL_SET", "").strip().lower()
     if env in VALID_TRIAL_SET:
         print(f"[nss_paths] TRIAL_SET = {env}  (from environment)")
@@ -70,12 +75,14 @@ def ask_trial_set() -> str:
     if not (sys.stdin and sys.stdin.isatty()):
         _no_tty_exit("TRIAL_SET", VALID_TRIAL_SET)
     while True:
-        answer = input("Which trials? [a]ll / [e]xperiment-block only: ").strip().lower()
+        answer = input("Which trials? [a]ll / [e]xperiment-block only / e[x]tra-block only: ").strip().lower()
         if answer in ("a", "all"):
             return "all"
         if answer in ("e", "experiment"):
             return "experiment"
-        print("  Please type 'a' (all) or 'e' (experiment-block only).")
+        if answer in ("x", "extra"):
+            return "extra"
+        print("  Please type 'a' (all), 'e' (experiment-block only) or 'x' (extra-block only).")
 
 
 def paths_for(mooney_split: str, trial_set: str = "all") -> dict:
@@ -84,7 +91,7 @@ def paths_for(mooney_split: str, trial_set: str = "all") -> dict:
         raise ValueError(f"mooney_split must be one of {VALID}, got {mooney_split!r}")
     if trial_set not in VALID_TRIAL_SET:
         raise ValueError(f"trial_set must be one of {VALID_TRIAL_SET}, got {trial_set!r}")
-    suffix = "" if trial_set == "all" else "_exponly"
+    suffix = TRIAL_SET_SUFFIX[trial_set]
     shared_dir = Path(f"analysesresults/NSS{suffix}")  # mode-independent: FixMaps + within-phase
     out_dir = Path(f"analysesresults/NSS_{mooney_split}{suffix}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -108,18 +115,19 @@ def filter_trial_set(fixations_df, trial_set: str):
     """Restrict a fixations DataFrame (pandas, from the parquet) to the chosen trial set.
 
     "all" returns the frame untouched; "experiment" keeps only Experiment-block
-    fixations (drops the Extra block). Requires the parquet's block_type column —
-    rerun NSSExporter.py if it is missing.
+    fixations and "extra" keeps only Extra-block fixations. Both single-block sets
+    need the parquet's block_type column — rerun NSSExporter.py if it is missing.
     """
     if trial_set == "all":
         return fixations_df
+    block = {"experiment": "Experiment", "extra": "Extra"}[trial_set]
     if "block_type" not in fixations_df.columns:
         raise SystemExit(
-            "TRIAL_SET=experiment needs the 'block_type' column in the fixations "
+            f"TRIAL_SET={trial_set} needs the 'block_type' column in the fixations "
             "parquet. Rerun Scripts/Analysis/NSS/NSSExporter.py to regenerate it."
         )
-    out = fixations_df[fixations_df["block_type"] == "Experiment"]
-    print(f"[nss_paths] trial set 'experiment': kept {len(out)} / {len(fixations_df)} fixations (Experiment block only)")
+    out = fixations_df[fixations_df["block_type"] == block]
+    print(f"[nss_paths] trial set '{trial_set}': kept {len(out)} / {len(fixations_df)} fixations ({block} block only)")
     return out
 
 
