@@ -345,9 +345,17 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
     os.makedirs(output_dir, exist_ok=True)
     combined = []
 
+    # Normalize exclusion keys to strings: participant IDs in Settings are ints
+    # (107) but fileinfo participant_id is str ("107", via
+    # filename_format_schema_overrides), so int keys would never match and the
+    # exclusions would silently not fire.
+    exclude_subjects = {str(p) for p in exclude_subjects}
+    exclude_sessions = {str(k): v for k, v in exclude_sessions.items()}
+    exclude_blocks = {str(k): v for k, v in exclude_blocks.items()}
+
     for i, ev in enumerate(dataset.events):
         s_id = str(dataset.fileinfo['gaze']['session_id'][i]).upper()
-        p_id = dataset.fileinfo['gaze']['participant_id'][i]
+        p_id = str(dataset.fileinfo['gaze']['participant_id'][i])
 
         if p_id in exclude_subjects:
             continue
