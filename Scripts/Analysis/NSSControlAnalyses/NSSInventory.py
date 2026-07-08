@@ -18,7 +18,7 @@ MIN_SUBJ_PER_IMAGE_NSS   = 2
 MIN_SUBJ_PER_IMAGE_CROSS = 2
 
 # ── Load ──────────────────────────────────────────────────────────────────────
-fixations   = pd.read_parquet(FIX_FILE)
+fixations   = nss_paths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
 FixMaps     = pickle.load(open(NSS_DIR / "FixMaps_full.pkl",              "rb"))["data"]
 NSSResults  = pickle.load(open(NSS_DIR / "NSS_WithinPhase.pkl",           "rb"))["data"]
 CrossResults= pickle.load(open(_P["CROSS_PKL"],                           "rb"))["data"]

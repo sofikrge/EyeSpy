@@ -622,14 +622,19 @@ if __name__ == "__main__":
     import nss_paths
     _P = nss_paths.select()
     MOONEY_SPLIT = _P["MOONEY_SPLIT"]
+    TRIAL_SET = _P["TRIAL_SET"]
     OUTPUT_DIR = _P["OUTPUT_DIR"]
     _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
 
     # ---- Build fixmaps ----
-    fixations = load_fixations()
+    # In trial_set="experiment" the Extra block is dropped up front, so fixmaps,
+    # within-phase and cross-phase all use Experiment-block fixations only
+    # (outputs go to the _exponly folders resolved by nss_paths).
+    fixations = nss_paths.filter_trial_set(load_fixations(), TRIAL_SET)
     ppd = MASK_PPD
     cache_path = _P["FIXMAPS_PKL"]  # shared
-    meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v3_awareness_split")
+    meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v3_awareness_split",
+                       extra={"trial_set": str(TRIAL_SET)})
 
     # Open Fixmaps (heatmaps) cache
     try: # attempt to open cache file, if meta matches, otherwise force recomputation
@@ -659,7 +664,11 @@ if __name__ == "__main__":
     nss_cache_path = _P["WITHIN_PKL"]  # shared
     nss_meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"),
                           tag="calculate_NSS_similarity:v4_per_viewing",  # per-(participant,trial) scoring
-                          extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS)})
+                          extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS),
+                                 "trial_set": str(TRIAL_SET),
+                                 # Extra-block trials renumbered +300 in NSSExporter
+                                 # (unique per-session viewing keys); forces one recompute
+                                 "trial_numbering": "extra_offset_300"})
 
     # Open NSS cache, if meta matches, otherwise force recomputation
     try:
@@ -704,7 +713,9 @@ if __name__ == "__main__":
                           tag="calculate_NSS_crossphase:v3_mooney_split",  # ← Changed version tag
                           extra={"nan_policy": str(NAN_POLICY_CROSS),
                                  "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS),
-                                 "mooney_split": str(MOONEY_SPLIT)})
+                                 "mooney_split": str(MOONEY_SPLIT),
+                                 "trial_set": str(TRIAL_SET),
+                                 "trial_numbering": "extra_offset_300"})
     
     # try loading cache
     try:

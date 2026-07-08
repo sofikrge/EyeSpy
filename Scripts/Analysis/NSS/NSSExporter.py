@@ -9,8 +9,11 @@ This script:
 5. Extracts and normalizes gaze coordinates (x_deg_centered, y_deg)
 6. Exports processed fixations to a Parquet file for further analysis in NSSAnalyses script
 Output:
-    Parquet file with columns: ImageName, session, image_type, participant, x_deg_centered, y_deg
+    Parquet file with columns: ImageName, session, image_type, participant, x_deg_centered, y_deg,
+    condition, trial_number, awareness, Mooney_Half, block_type (Experiment / Extra)
     Only includes fixations with valid image_type classifications (mooney, disamb_intact, disamb_not_intact)
+    trial_number is renumbered so it is unique within a session: Experiment trials keep
+    their number (1-133), Extra-block trials get +300 (301-452, matching session order).
 Note:
     Requires prior execution of EyeDrops.py to generate input CSV files.
     Handles mixed data types (Int64 vs Float64) in risky columns by casting to Float64.
@@ -75,6 +78,17 @@ print(f"Merging {len(dfs)} participant files...")
 full_df = pl.concat(dfs, how="diagonal_relaxed").with_columns([
     pl.col("onset").cast(pl.Float64, strict=False),
     pl.col("mooney_start").cast(pl.Float64, strict=False),  # MSG-marker Mooney onset; used for the temporal half split
+    # Renumber Extra-block trials (+300): trial_number restarts at 1 in the Extra
+    # block, so without an offset an Experiment and an Extra viewing of the same
+    # image can share a (participant, trial_number) key and be merged into one
+    # scoring unit downstream. The offset makes trial_number unique within a
+    # session AND sort in true session order (the Extra block ran after the
+    # Experiment block), which the Experiment_Half median split relies on.
+    pl.when(pl.col("block_type") == "Extra")
+      .then(pl.col("trial_number").cast(pl.Int64) + 300)
+      .otherwise(pl.col("trial_number").cast(pl.Int64))
+      .cast(pl.Utf8)
+      .alias("trial_number"),
 ])
 
 # 6. Transform & Select
@@ -134,7 +148,7 @@ export_df = (
     .select([
         "ImageName", "session", "image_type", "participant",
         "x_deg_centered", "y_deg", "condition", "trial_number",
-        "awareness", "Mooney_Half"
+        "awareness", "Mooney_Half", "block_type"
     ])
     .drop_nulls(subset=["image_type"])
 )

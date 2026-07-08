@@ -26,15 +26,23 @@ from pathlib import Path
 #   False -> all three groups (Conscious Aware + both unconscious groups)
 UNCONSCIOUS_ONLY = True
 
+# Trial set: [a]ll trials or [e]xperiment-block only (prompt, or $TRIAL_SET env var).
+# Picks which whole-mode results folder is read (NSS_whole / NSS_whole_exponly).
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root, for nss_paths
+import nss_paths
+TRIAL_SET = nss_paths.ask_trial_set()
+
 # Whole-window plot (awareness x Intact/Scrambled) — it has no Early/Late dimension,
 # so it always reads the whole-mode cross-phase results. The halves comparison has its
 # own plot (CrossNSSHalvesLinePlot.py).
-INPUT_FILE  = Path("analysesresults/NSS_whole/NSS_CrossPhase_LongFormat.csv")
+INPUT_FILE  = nss_paths.paths_for("whole", TRIAL_SET)["CROSS_CSV"]
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+_SUFFIX = "" if TRIAL_SET == "all" else "_exponly"
 OUTPUT_PLOT = OUTPUT_DIR / (
-    "NSS_CrossPhase_Violin_byAwareness_unconsciousOnly.png"
+    f"NSS_CrossPhase_Violin_byAwareness_unconsciousOnly{_SUFFIX}.png"
     if UNCONSCIOUS_ONLY else
-    "NSS_CrossPhase_Violin_byAwareness.png"
+    f"NSS_CrossPhase_Violin_byAwareness{_SUFFIX}.png"
 )
 
 PALETTE = ['#edf8fb', '#b3cde3', '#648fff', '#785ef0']
@@ -54,6 +62,9 @@ if UNCONSCIOUS_ONLY:
     GROUP_ORDER = ["Unconscious Aware\n(PAS 2-3)", "Unconscious Unaware\n(PAS 0)"]
 
 
+# Model EMMs pasted in by hand from the lmer fitted on the ALL-trials data —
+# only drawn when TRIAL_SET == "all" (paste experiment-only EMMs here and extend
+# the check if you fit that model).
 EMMS = {
     "Conscious Aware\n(PAS 2-3)":     {"Intact": 2.21, "Scrambled": 1.23},
     "Unconscious Aware\n(PAS 2-3)":   {"Intact": 1.81, "Scrambled": 1.22},
@@ -110,11 +121,13 @@ def main():
     ax.scatter(df_agg["x_pos"], df_agg["NSS"], color="grey", 
                linewidth=0.5, s=20, alpha=0.8, zorder=3)
 
-    for group in GROUP_ORDER:
+    if TRIAL_SET != "all":
+        print("Skipping EMM diamonds: the pasted EMMs come from the all-trials model.")
+    for group in (GROUP_ORDER if TRIAL_SET == "all" else []):
         for ref in ["Intact", "Scrambled"]:
             # Reconstruct the exact X position for this specific violin half
             x_pos = GROUP_POS[group] + REF_OFFSET[ref]
-            
+
             # Grab the value from the dictionary
             if group in EMMS and ref in EMMS[group]:
                 emm_val = EMMS[group][ref]

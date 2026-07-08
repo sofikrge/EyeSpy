@@ -1,26 +1,32 @@
 """
-Shared Mooney-split selection and output paths for the NSS pipeline.
+Shared Mooney-split / trial-set selection and output paths for the NSS pipeline.
 
 Every NSS script that reads or writes the *cross-phase* outputs calls `select()`
 at startup, which prompts once for the Mooney-window mode ("whole" or "halves")
-so you can never run a script against the wrong version by forgetting a setting.
+and once for the trial set ("all" or "experiment"-block-only trials), so you can
+never run a script against the wrong version by forgetting a setting.
 
-Folder layout (relative to the project root, where these scripts are run from):
+Folder layout (relative to the project root, where these scripts are run from).
+<suffix> is "" for trial_set=all and "_exponly" for trial_set=experiment:
 
-    analysesresults/NSS/            shared, mode-independent
+    analysesresults/NSS<suffix>/            shared across Mooney modes
         FixMaps_full.pkl
         NSS_WithinPhase.pkl
         NSS_WithinPhase_LongFormat.csv
-    analysesresults/NSS_<mode>/     per-mode  (mode = whole | halves)
+    analysesresults/NSS_<mode><suffix>/     per-mode  (mode = whole | halves)
         NSS_crossphase_descriptives.pkl
         NSS_CrossPhase_LongFormat.csv
         NSS_CrossPhase_LongFormat_centred.csv
 
 Only the cross-phase step depends on the Mooney split, so FixMaps and the
 within-phase results are shared across modes (and never rebuilt when you switch).
+The trial set, however, changes the input fixations themselves (Extra-block
+trials are dropped entirely), so *everything* — FixMaps, within-phase and
+cross-phase — is versioned by it.
 
-Non-interactive override: set the MOONEY_SPLIT environment variable to
-"whole" or "halves" to skip the prompt (handy for scripted/batch runs).
+Non-interactive override: set the MOONEY_SPLIT ("whole"/"halves") and TRIAL_SET
+("all"/"experiment") environment variables to skip the prompts (handy for
+scripted/batch runs).
 """
 
 from pathlib import Path
@@ -28,7 +34,14 @@ import os
 import sys
 
 VALID = ("whole", "halves")
-SHARED_DIR = Path("analysesresults/NSS")  # mode-independent: FixMaps + within-phase
+VALID_TRIAL_SET = ("all", "experiment")
+
+
+def _no_tty_exit(var: str, values: tuple) -> None:
+    raise SystemExit(
+        f"{var} is not set and there is no terminal to prompt on. "
+        f"Set the environment variable {var}={'|'.join(values)} and rerun."
+    )
 
 
 def ask_mooney_split() -> str:
@@ -38,10 +51,7 @@ def ask_mooney_split() -> str:
         print(f"[nss_paths] MOONEY_SPLIT = {env}  (from environment)")
         return env
     if not (sys.stdin and sys.stdin.isatty()):
-        raise SystemExit(
-            "MOONEY_SPLIT is not set and there is no terminal to prompt on. "
-            "Set the environment variable MOONEY_SPLIT=whole|halves and rerun."
-        )
+        _no_tty_exit("MOONEY_SPLIT", VALID)
     while True:
         answer = input("\nWhich Mooney-window version? [w]hole / [h]alves: ").strip().lower()
         if answer in ("w", "whole"):
@@ -51,20 +61,42 @@ def ask_mooney_split() -> str:
         print("  Please type 'w' (whole) or 'h' (halves).")
 
 
-def paths_for(mooney_split: str) -> dict:
-    """Resolve every NSS output path for the given mode and ensure the folder exists."""
+def ask_trial_set() -> str:
+    """Return "all"/"experiment" from $TRIAL_SET if set, otherwise prompt the user."""
+    env = os.environ.get("TRIAL_SET", "").strip().lower()
+    if env in VALID_TRIAL_SET:
+        print(f"[nss_paths] TRIAL_SET = {env}  (from environment)")
+        return env
+    if not (sys.stdin and sys.stdin.isatty()):
+        _no_tty_exit("TRIAL_SET", VALID_TRIAL_SET)
+    while True:
+        answer = input("Which trials? [a]ll / [e]xperiment-block only: ").strip().lower()
+        if answer in ("a", "all"):
+            return "all"
+        if answer in ("e", "experiment"):
+            return "experiment"
+        print("  Please type 'a' (all) or 'e' (experiment-block only).")
+
+
+def paths_for(mooney_split: str, trial_set: str = "all") -> dict:
+    """Resolve every NSS output path for the given mode/trial set and ensure the folder exists."""
     if mooney_split not in VALID:
         raise ValueError(f"mooney_split must be one of {VALID}, got {mooney_split!r}")
-    out_dir = Path(f"analysesresults/NSS_{mooney_split}")
+    if trial_set not in VALID_TRIAL_SET:
+        raise ValueError(f"trial_set must be one of {VALID_TRIAL_SET}, got {trial_set!r}")
+    suffix = "" if trial_set == "all" else "_exponly"
+    shared_dir = Path(f"analysesresults/NSS{suffix}")  # mode-independent: FixMaps + within-phase
+    out_dir = Path(f"analysesresults/NSS_{mooney_split}{suffix}")
     out_dir.mkdir(parents=True, exist_ok=True)
     return {
         "MOONEY_SPLIT": mooney_split,
-        "SHARED_DIR": SHARED_DIR,
+        "TRIAL_SET": trial_set,
+        "SHARED_DIR": shared_dir,
         "OUTPUT_DIR": out_dir,
-        # shared (mode-independent)
-        "FIXMAPS_PKL": SHARED_DIR / "FixMaps_full.pkl",
-        "WITHIN_PKL": SHARED_DIR / "NSS_WithinPhase.pkl",
-        "WITHIN_CSV": SHARED_DIR / "NSS_WithinPhase_LongFormat.csv",
+        # shared across Mooney modes (but per trial set)
+        "FIXMAPS_PKL": shared_dir / "FixMaps_full.pkl",
+        "WITHIN_PKL": shared_dir / "NSS_WithinPhase.pkl",
+        "WITHIN_CSV": shared_dir / "NSS_WithinPhase_LongFormat.csv",
         # per-mode (cross-phase)
         "CROSS_PKL": out_dir / "NSS_crossphase_descriptives.pkl",
         "CROSS_CSV": out_dir / "NSS_CrossPhase_LongFormat.csv",
@@ -72,6 +104,25 @@ def paths_for(mooney_split: str) -> dict:
     }
 
 
+def filter_trial_set(fixations_df, trial_set: str):
+    """Restrict a fixations DataFrame (pandas, from the parquet) to the chosen trial set.
+
+    "all" returns the frame untouched; "experiment" keeps only Experiment-block
+    fixations (drops the Extra block). Requires the parquet's block_type column —
+    rerun NSSExporter.py if it is missing.
+    """
+    if trial_set == "all":
+        return fixations_df
+    if "block_type" not in fixations_df.columns:
+        raise SystemExit(
+            "TRIAL_SET=experiment needs the 'block_type' column in the fixations "
+            "parquet. Rerun Scripts/Analysis/NSS/NSSExporter.py to regenerate it."
+        )
+    out = fixations_df[fixations_df["block_type"] == "Experiment"]
+    print(f"[nss_paths] trial set 'experiment': kept {len(out)} / {len(fixations_df)} fixations (Experiment block only)")
+    return out
+
+
 def select() -> dict:
-    """Prompt (or read $MOONEY_SPLIT) and return the resolved path dict."""
-    return paths_for(ask_mooney_split())
+    """Prompt (or read $MOONEY_SPLIT / $TRIAL_SET) and return the resolved path dict."""
+    return paths_for(ask_mooney_split(), ask_trial_set())

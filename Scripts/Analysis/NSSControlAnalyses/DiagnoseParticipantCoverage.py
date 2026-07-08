@@ -33,7 +33,7 @@ TARGET_AWARENESS     = "unconscious_unaware"
 TARGET_IMAGE_TYPE    = "mooney_post_intact"
 # ─────────────────────────────────────────────────────────────────────────────
 
-fix   = pd.read_parquet(FIX_FILE)
+fix   = nss_paths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
 cross = pickle.load(open(CROSS_CACHE, "rb"))
 cross = cross["data"] if isinstance(cross, dict) else cross
 

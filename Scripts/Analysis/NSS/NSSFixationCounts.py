@@ -61,7 +61,7 @@ def _in_bounds(x_deg, y_deg):
 
 def load_inbounds_fixations():
     """All finite, in-bounds fixations (the only ones that land on a map)."""
-    fix = pd.read_parquet(FIX_FILE)
+    fix = nss_paths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
     for c in ("x_deg_centered", "y_deg"):
         fix[c] = pd.to_numeric(fix[c], errors="coerce")
     fix = fix.dropna(subset=["x_deg_centered", "y_deg"])
