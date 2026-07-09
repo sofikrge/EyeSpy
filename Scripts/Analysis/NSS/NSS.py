@@ -829,24 +829,26 @@ if __name__ == "__main__":
     missing = df_long['Within-NSS-Typicality'].isna().sum()
     print(f"\n[Eccentricity Check] Matched: {matched} | Missing (NaN): {missing}")
 
-    # find median trial no + label first vs second half of experiment for later analysis
+    # label experiment-thirds for later analysis: three ordered levels — the
+    # Experiment block split at each participant's median trial (Exp_First /
+    # Exp_Second) plus the whole Extra block as the third level.
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
-    # Compute each participant's median trial on their UNIQUE trials, so the split
-    # can't be tilted by a trial appearing a different number of times. In halves
-    # mode a trial yields up to two rows (Early/Late) that may survive the subject
-    # cutoff unevenly; deduplicating first keeps the median stable. In whole mode
-    # each (Participant, Session, Trial) is already unique, so this is a no-op there
-    # and leaves whole-mode Experiment_Half labels unchanged.
-    median_trial = (
-        df_long.drop_duplicates(['Participant', 'Session', 'Trial'])
+    # Median is computed on Experiment-block trials only (Trial <= 300; the exporter
+    # renumbers Extra trials +300) so the Extra viewings can't tilt the split. Compute
+    # it on UNIQUE trials so a trial appearing a different number of times (e.g. the
+    # Early/Late rows in halves mode) can't shift the median.
+    exp_median = (
+        df_long[df_long['Trial'] <= 300]
+               .drop_duplicates(['Participant', 'Session', 'Trial'])
                .groupby(['Participant', 'Session'])['Trial'].median()
-               .rename('median_trial')
+               .rename('exp_median')
     )
-    df_long = df_long.merge(median_trial, on=['Participant', 'Session'], how='left')
-    df_long['Experiment_Half'] = np.where(
-        df_long['Trial'] <= df_long['median_trial'], 'First_Half', 'Second_Half'
+    df_long = df_long.merge(exp_median, on=['Participant', 'Session'], how='left')
+    df_long['Experiment_Third'] = np.where(
+        df_long['Trial'] > 300, 'Extra',
+        np.where(df_long['Trial'] <= df_long['exp_median'], 'Exp_First', 'Exp_Second')
     )
-    df_long = df_long.drop(columns='median_trial')
+    df_long = df_long.drop(columns='exp_median')
 
     # Block label from the exporter's +300 Extra-block renumbering (Experiment 1-133,
     # Extra 301-452): lets Jamovi filter to one block or use it as a covariate. The
@@ -857,7 +859,7 @@ if __name__ == "__main__":
 
     # Long format sasving
     df_long_fully_melted = df_long.melt(
-        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Half', 'Mooney_Half', 'Block', 'Within-NSS-Typicality'],
+        id_vars=['Participant', 'Image', 'Session', 'Awareness', 'Trial', 'Experiment_Third', 'Mooney_Half', 'Block', 'Within-NSS-Typicality'],
         value_vars=['NSS_Intact', 'NSS_Scrambled'],
         var_name='ReferenceMap', 
         value_name='NSS'
