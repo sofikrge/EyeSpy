@@ -42,6 +42,31 @@ def _missing_run_lengths(mask):
         run_len[start:end] = end - start
     return run_len
 
+def _interpolate_segment(t_seg, coord_views, max_gap_samples, margin_samples):
+    """PCHIP-fill short blink gaps within ONE contiguous recording segment, in place.
+
+    `coord_views` are numpy views into the per-coordinate arrays for this segment, so
+    writing into them updates the parent arrays. A blink is widened by `margin_samples`
+    on each side and bridged with a shape-preserving cubic (PCHIP). A blink reaching a
+    segment edge with valid data on only one side is left as-is (PCHIP won't extrapolate).
+    """
+    missing = np.isnan(coord_views[0])           # in a blink all coordinates drop out together
+    run_len = _missing_run_lengths(missing)
+    short_blink = missing & (run_len <= max_gap_samples)   # real blinks -> fill
+    long_gap    = missing & (run_len >  max_gap_samples)   # track loss  -> never fill
+    # Widen each short blink by the margin (Dankner et al.); never fill long-gap samples.
+    # (binary_dilation with iterations<1 would fill the whole segment, so guard margin=0.)
+    if margin_samples >= 1:
+        fill_region = binary_dilation(short_blink, iterations=margin_samples) & ~long_gap
+    else:
+        fill_region = short_blink & ~long_gap
+    for v in coord_views:
+        anchor = ~np.isnan(v) & ~fill_region     # fit on valid samples outside the fill region
+        if anchor.sum() >= 2:                    # PCHIP needs at least two anchors
+            curve = PchipInterpolator(t_seg[anchor], v[anchor], extrapolate=False)(t_seg)
+            fill_here = fill_region & np.isfinite(curve)  # isfinite drops edges PCHIP can't reach
+            v[fill_here] = curve[fill_here]
+
 def interpolate_blink_gaps(dataset, max_gap_ms, sampling_rate=1000, margin_ms=200):
     """
     Interpolate gaze POSITION across short blink gaps, in place, before velocity/event
@@ -55,44 +80,36 @@ def interpolate_blink_gaps(dataset, max_gap_ms, sampling_rate=1000, margin_ms=20
     null runs are treated as track loss (not a real blink), left as-is, so their events are
     still dropped downstream. Gaps at the very start/end of a recording have valid data on
     only one side; PCHIP does not extrapolate, so they are left as-is too (correct behaviour).
+
+    Each recording file contains several segments (blocks) separated by multi-second gaps in
+    the timeline; we interpolate each segment independently so a blink's margin and PCHIP
+    curve never bridge such a gap (which would overwrite real data in the next segment).
     """
     # At `sampling_rate` Hz each sample spans 1000/rate ms.
     max_gap_samples = int(round(max_gap_ms * sampling_rate / 1000))
     margin_samples = int(round(margin_ms * sampling_rate / 1000))
+    sample_period_ms = 1000.0 / sampling_rate
     print(f"\nInterpolating blink gaps up to {max_gap_ms} ms (+/-{margin_ms} ms margin)...")
 
     for g in dataset.gaze:
         s = g.samples
         t = s["time"].to_numpy()
         # 'pixel' is a list per sample: [x, y] for one eye, or [x, y, ...] if more coords
-        # are stored. We interpolate each coordinate independently.
+        # are stored. One editable float array per coordinate (polars null -> NaN; .copy()
+        # makes it writable so the per-segment fills below can write in place).
         n_coords = s["pixel"].list.len().max()
+        coords = [s.select(pl.col("pixel").list.get(i)).to_series().to_numpy().copy()
+                  for i in range(n_coords)]
 
-        # Which samples are missing, and how long is each missing run? During a blink all
-        # coordinates drop out together, so we read the run pattern off the first coordinate.
-        missing = np.isnan(s.select(pl.col("pixel").list.get(0)).to_series().to_numpy())
-        run_len = _missing_run_lengths(missing)
-        short_blink = missing & (run_len <= max_gap_samples)   # real blinks we will fill
-        long_gap    = missing & (run_len >  max_gap_samples)   # track loss: never interpolate
+        # Segment boundaries: a time step larger than one sample period is a recording gap
+        # (block boundary), not missing data. Interpolate within each contiguous segment.
+        cut = np.flatnonzero(np.diff(t) > sample_period_ms) + 1
+        seg_bounds = np.concatenate(([0], cut, [len(t)])).astype(int)
+        for a, b in zip(seg_bounds[:-1], seg_bounds[1:]):
+            _interpolate_segment(t[a:b], [c[a:b] for c in coords], max_gap_samples, margin_samples)
 
-        # Widen each short blink by the margin on both sides (Dankner et al.), but never let
-        # the margin bleed into a long track-loss run (those samples must stay missing).
-        fill_region = binary_dilation(short_blink, iterations=margin_samples) & ~long_gap
-
-        # Fit PCHIP per coordinate on the anchor samples (valid AND outside the fill region,
-        # so the unreliable peri-blink samples don't anchor the curve), then fill the region.
-        new_coords = []
-        for i in range(n_coords):
-            v = s.select(pl.col("pixel").list.get(i)).to_series().to_numpy().copy()
-            anchor = ~np.isnan(v) & ~fill_region
-            if anchor.sum() >= 2:  # PCHIP needs at least two anchor points
-                curve = PchipInterpolator(t[anchor], v[anchor], extrapolate=False)(t)
-                fill_here = fill_region & np.isfinite(curve)  # isfinite drops start/end PCHIP can't reach
-                v[fill_here] = curve[fill_here]
-            new_coords.append(v)
-
-        # Rebuild the [x, y, ...] list; NaN (long gaps + start/end) becomes null again.
-        s = s.with_columns([pl.Series(f"_c{i}", new_coords[i]) for i in range(n_coords)])
+        # Rebuild the [x, y, ...] list; NaN (long gaps, segment edges, unfilled) -> null.
+        s = s.with_columns([pl.Series(f"_c{i}", coords[i]) for i in range(n_coords)])
         g.samples = s.with_columns(
             pl.concat_list([pl.col(f"_c{i}").fill_nan(None) for i in range(n_coords)]).alias("pixel")
         ).drop([f"_c{i}" for i in range(n_coords)])

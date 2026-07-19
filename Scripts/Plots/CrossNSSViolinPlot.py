@@ -122,9 +122,11 @@ def main():
     ax.scatter(df_agg["x_pos"], df_agg["NSS"], color="grey", 
                linewidth=0.5, s=20, alpha=0.8, zorder=3)
 
-    if TRIAL_SET != "all":
-        print("Skipping EMM diamonds: the pasted EMMs come from the all-trials model.")
-    for group in (GROUP_ORDER if TRIAL_SET == "all" else []):
+    # The pasted EMMs come from the ALL-trials, FILTER-mode lmer, so only overlay them there.
+    _draw_emms = (TRIAL_SET == "all" and BLINK_MODE == "filter")
+    if not _draw_emms:
+        print("Skipping EMM diamonds: the pasted EMMs come from the all-trials, filter-mode model.")
+    for group in (GROUP_ORDER if _draw_emms else []):
         for ref in ["Intact", "Scrambled"]:
             # Reconstruct the exact X position for this specific violin half
             x_pos = GROUP_POS[group] + REF_OFFSET[ref]
