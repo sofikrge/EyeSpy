@@ -10,6 +10,11 @@ global dataset
 print("\nLoading raw data...")
 settings.dataset.load()
 
+#%% Optional blink interpolation (must run on raw pixels, before pix2deg)
+if settings.INTERPOLATE_BLINKS:
+    settings.dataset = prep.interpolate_blink_gaps(
+        settings.dataset, settings.MAX_BLINK_INTERP_MS, settings.SCREEN["sampling_rate"])
+
 #%% Preprocess
 print("\nConverting to visual degrees...")
 settings.dataset.pix2deg()
@@ -47,7 +52,8 @@ prep.filter_events_blink_spatial(
     data_quality_folder=settings.data_quality_folder,
     debug=settings.DEBUG,
     image_size_deg=settings.IMAGE_SIZE_DEG,
-    filter_palette=settings.FILTER_PALETTE)
+    filter_palette=settings.FILTER_PALETTE,
+    skip_blink_filter=settings.INTERPOLATE_BLINKS)  # blinks already interpolated -> keep those events
 
 #%% Assign trial metadata 
 print("\nAssigning trial metadata and image phases to events...")

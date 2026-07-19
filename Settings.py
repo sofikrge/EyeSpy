@@ -69,6 +69,19 @@ MIN_FIX_DURATION_MS = 50      # minimum fixation length
 BUFFER_FIX = 51   # 51ms for fixations
 BUFFER_SAC = 60   # 50ms + 10ms for saccades
 
+# Blink handling: two mutually exclusive modes.
+#   INTERPOLATE_BLINKS = False -> original behaviour: detect events first, then DROP
+#                                 any fixation/saccade overlapping a blink (filter_events_blink_spatial).
+#   INTERPOLATE_BLINKS = True  -> PCHIP-interpolate (shape-preserving cubic) the position ACROSS short
+#                                 blink gaps before event detection, so a blink-spanning
+#                                 fixation stays one continuous fixation. The blink
+#                                 event-drop step is then skipped (spatial filtering is kept).
+# Only gaps up to MAX_BLINK_INTERP_MS are filled; longer gaps are treated as track loss,
+# left as-is, and their events dropped as before. 500 ms is the field-standard cap
+# (Kret & Sjak-Shie 2019) and sits in the trough of this dataset's blink-duration distribution.
+INTERPOLATE_BLINKS = False
+MAX_BLINK_INTERP_MS = 500
+
 IMAGE_SIZE_DEG = (9.99, 7.50)
 CENTER_RADIUS_DG = 1.5 #shaked's value
 HX, HY = IMAGE_SIZE_DEG[0] / 2, IMAGE_SIZE_DEG[1] / 2
@@ -101,18 +114,18 @@ MAT_FIELD_MAP = {
     'response_PAS_Q': 'response_PAS_Q',
 }
 
-EXCLUDE_SUBJECTS = [] 
-# Format: { ParticipantID: ['SessionLetter'] } 
+EXCLUDE_SUBJECTS = [
+    104, 106, 109, 110, 112, 118, 120,  # left-eye tracked (both C and U sessions)
+]
 
+# Format: { ParticipantID: ['SessionLetter'] }
 EXCLUDE_SESSIONS = {
 #    104: ['U'], # unfocused eyes sometimes
 #    105: ['U'], # unfocused eyes sometimes
 #    106: ['U'], # unfocused eyes sometimes
     107: ['U'], # low PAS 0 trials
-    110: ['U'], # low PAS 0 trials
     111: ['U'], # low PAS 0 trials
 #    112: ['C'], # unfocused eyes sometimes
-    118: ['U'] # low PAS 0 trials
 }
 
 # Exclude specific BLOCKS per session per participant

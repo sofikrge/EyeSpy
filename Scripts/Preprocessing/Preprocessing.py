@@ -8,6 +8,7 @@ import copy
 from pathlib import Path
 import numpy as np
 import scipy.io as sio
+from scipy.interpolate import PchipInterpolator
 
 def shift_gaze_offset(dataset, eye_offset=EYE_OFFSET):
     """Shift gaze coordinates by a specified offset for left and right eyes."""
@@ -27,6 +28,66 @@ def shift_gaze_offset(dataset, eye_offset=EYE_OFFSET):
                 pl.col("position").list.get(0) + off,
                 pl.col("position").list.get(1)]))
         
+    return dataset
+
+def _missing_run_lengths(mask):
+    """Given a boolean 'is-missing' array, return an int array where each missing sample
+    holds the length of its consecutive missing run (0 where present). Lets us keep short
+    blinks and leave long track losses untouched."""
+    run_len = np.zeros(mask.shape, dtype=int)
+    padded = np.concatenate(([False], mask, [False]))
+    edges = np.flatnonzero(padded[1:] != padded[:-1])   # run boundaries, paired as (start, end)
+    for start, end in zip(edges[0::2], edges[1::2]):
+        run_len[start:end] = end - start
+    return run_len
+
+def interpolate_blink_gaps(dataset, max_gap_ms, sampling_rate=1000):
+    """
+    Interpolate gaze POSITION across short blink gaps, in place, before velocity/event
+    detection, using a shape-preserving piecewise cubic Hermite polynomial (PCHIP, i.e.
+    MATLAB's `pchip`). During a blink EyeLink logs no position, so pymovements loads those
+    samples as null in the 'pixel' column; we bridge each null run with a smooth PCHIP
+    curve fitted to the surrounding valid samples.
+
+    Only gaps up to `max_gap_ms` are filled. Longer null runs are treated as track loss
+    (not a real blink), left as-is, so their events are still dropped downstream. Gaps at
+    the very start/end of a recording have valid data on only one side; PCHIP does not
+    extrapolate, so they are left as-is too (correct behaviour).
+    """
+    # At `sampling_rate` Hz each sample spans 1000/rate ms, so `max_gap_ms` of missing
+    # data is this many consecutive samples.
+    max_gap_samples = int(round(max_gap_ms * sampling_rate / 1000))
+    print(f"\nInterpolating blink gaps up to {max_gap_ms} ms ({max_gap_samples} samples)...")
+
+    for g in dataset.gaze:
+        s = g.samples
+        t = s["time"].to_numpy()
+        # 'pixel' is a list per sample: [x, y] for one eye, or [x, y, ...] if more coords
+        # are stored. We interpolate each coordinate independently.
+        n_coords = s["pixel"].list.len().max()
+
+        # Which samples are missing, and how long is each missing run? During a blink all
+        # coordinates drop out together, so we read the run pattern off the first coordinate.
+        missing = np.isnan(s.select(pl.col("pixel").list.get(0)).to_series().to_numpy())
+        short_gap = missing & (_missing_run_lengths(missing) <= max_gap_samples)
+
+        # Fit PCHIP per coordinate on its valid samples and fill only the short interior gaps.
+        new_coords = []
+        for i in range(n_coords):
+            v = s.select(pl.col("pixel").list.get(i)).to_series().to_numpy().copy()
+            valid = ~np.isnan(v)
+            if valid.sum() >= 2:  # PCHIP needs at least two anchor points
+                curve = PchipInterpolator(t[valid], v[valid], extrapolate=False)(t)
+                fill_here = short_gap & np.isfinite(curve)  # isfinite drops start/end gaps PCHIP can't reach
+                v[fill_here] = curve[fill_here]
+            new_coords.append(v)
+
+        # Rebuild the [x, y, ...] list; NaN (long gaps + start/end) becomes null again.
+        s = s.with_columns([pl.Series(f"_c{i}", new_coords[i]) for i in range(n_coords)])
+        g.samples = s.with_columns(
+            pl.concat_list([pl.col(f"_c{i}").fill_nan(None) for i in range(n_coords)]).alias("pixel")
+        ).drop([f"_c{i}" for i in range(n_coords)])
+
     return dataset
 
 def filter_and_report_validations(dataset, data_quality_folder, avg_threshold, max_threshold):
@@ -89,11 +150,16 @@ def count_events(df):
 
 def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
                                  hx, hy, center_radius_dg, data_quality_folder,
-                                 debug=False, image_size_deg=None, filter_palette=None):
+                                 debug=False, image_size_deg=None, filter_palette=None,
+                                 skip_blink_filter=False):
     """
     Remove events that overlap blinks, fall outside the image, or fall inside the
     center radius. Tracks counts at each stage, saves a QC CSV, and (if debug)
     plots the filtering result per session.
+
+    If `skip_blink_filter` is True (used when blinks were already interpolated
+    upstream, so blink-spanning events are valid continuous fixations), the
+    blink-overlap drop is skipped and only the spatial filtering is applied.
     """
 
     print("\nBlink and Spatial Filtering of Events...")
@@ -117,7 +183,7 @@ def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
         blink_intervals = plots.parse_blink_intervals(os.path.join(raw_data_dir, file_name)) # extract all blinks
         qc['blinks_detected'] = len(blink_intervals)
 
-        if blink_intervals: # if there are blinks, filter out events overlapping them + their buffers
+        if blink_intervals and not skip_blink_filter: # if there are blinks, filter out events overlapping them + their buffers
             overlap_exprs = [
                 (((pl.col("name") == "fixation") & (pl.col("onset") <= b_off + buffer_fix) & (pl.col("offset") >= b_on - buffer_fix)) |
                 ((pl.col("name") == "saccade") & (pl.col("onset") <= b_off + buffer_sac) & (pl.col("offset") >= b_on - buffer_sac)))

@@ -3,6 +3,7 @@ NSS (Normalized Scanpath Saliency) Analysis Module for Eye-Gaze Data
 """
 
 #%%
+import os
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -626,6 +627,14 @@ if __name__ == "__main__":
     OUTPUT_DIR = _P["OUTPUT_DIR"]
     _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
 
+    # How the parquet's blinks were handled in Stage 1 ("filter" = events overlapping
+    # blinks dropped; "interp" = position PCHIP-interpolated across short blink gaps).
+    # This isn't stored in the parquet, so set $BLINK_MODE to match how you ran Stage 1.
+    # It is recorded in every cache meta below so that switching blink mode forces a
+    # recompute instead of silently returning the other mode's cached results.
+    BLINK_MODE = os.environ.get("BLINK_MODE", "filter").strip().lower()
+    print(f"[NSS] BLINK_MODE = {BLINK_MODE}  (set $BLINK_MODE=filter|interp to match Stage 1)")
+
     # ---- Build fixmaps ----
     # A single-block trial set (trial_set="experiment" or "extra") drops the other
     # block up front, so fixmaps, within-phase and cross-phase all use that one
@@ -634,7 +643,7 @@ if __name__ == "__main__":
     ppd = MASK_PPD
     cache_path = _P["FIXMAPS_PKL"]  # shared
     meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v3_awareness_split",
-                       extra={"trial_set": str(TRIAL_SET)})
+                       extra={"trial_set": str(TRIAL_SET), "blink_mode": str(BLINK_MODE)})
 
     # Open Fixmaps (heatmaps) cache
     try: # attempt to open cache file, if meta matches, otherwise force recomputation
@@ -666,6 +675,7 @@ if __name__ == "__main__":
                           tag="calculate_NSS_similarity:v4_per_viewing",  # per-(participant,trial) scoring
                           extra={"min_subj_per_image_nss": int(MIN_SUBJ_PER_IMAGE_NSS),
                                  "trial_set": str(TRIAL_SET),
+                                 "blink_mode": str(BLINK_MODE),
                                  # Extra-block trials renumbered +300 in NSSExporter
                                  # (unique per-session viewing keys); forces one recompute
                                  "trial_numbering": "extra_offset_300"})
@@ -715,6 +725,7 @@ if __name__ == "__main__":
                                  "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS),
                                  "mooney_split": str(MOONEY_SPLIT),
                                  "trial_set": str(TRIAL_SET),
+                                 "blink_mode": str(BLINK_MODE),
                                  "trial_numbering": "extra_offset_300"})
     
     # try loading cache
