@@ -76,11 +76,17 @@ BUFFER_SAC = 60   # 50ms + 10ms for saccades
 #                                 blink gaps before event detection, so a blink-spanning
 #                                 fixation stays one continuous fixation. The blink
 #                                 event-drop step is then skipped (spatial filtering is kept).
-# Only gaps up to MAX_BLINK_INTERP_MS are filled; longer gaps are treated as track loss,
-# left as-is, and their events dropped as before. 500 ms is the field-standard cap
-# (Kret & Sjak-Shie 2019) and sits in the trough of this dataset's blink-duration distribution.
+# Following Dankner, Shalev & Carrasco (2017, Psych Sci), each blink is widened by
+# BLINK_MARGIN_MS on both sides before interpolation (the samples flanking a blink are
+# unreliable) and the whole region is PCHIP-interpolated.
+# Only gaps up to MAX_BLINK_INTERP_MS (raw blink length, before the margin) are filled;
+# longer gaps are treated as track loss, left as-is, and their events dropped as before.
+# 500 ms is the field-standard cap (Kret & Sjak-Shie 2019) and sits in the trough of this
+# dataset's blink-duration distribution. Dankner et al. used no cap, but their data was
+# epoched so gap length was naturally bounded; ours is continuous (25-min track losses exist).
 INTERPOLATE_BLINKS = False
 MAX_BLINK_INTERP_MS = 500
+BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (Dankner et al. 2017)
 
 IMAGE_SIZE_DEG = (9.99, 7.50)
 CENTER_RADIUS_DG = 1.5 #shaked's value

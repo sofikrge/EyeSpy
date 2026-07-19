@@ -32,13 +32,14 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root, for nss_paths
 import nss_paths
 TRIAL_SET = nss_paths.ask_trial_set()
+BLINK_MODE = nss_paths.ask_blink_mode()  # filter (original) / interp (PCHIP) — picks the *_interp folder
 
 # Whole-window plot (awareness x Intact/Scrambled) — it has no Early/Late dimension,
 # so it always reads the whole-mode cross-phase results. The halves comparison has its
 # own plot (CrossNSSHalvesLinePlot.py).
-INPUT_FILE  = nss_paths.paths_for("whole", TRIAL_SET)["CROSS_CSV"]
+INPUT_FILE  = nss_paths.paths_for("whole", TRIAL_SET, BLINK_MODE)["CROSS_CSV"]
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-_SUFFIX = nss_paths.TRIAL_SET_SUFFIX[TRIAL_SET]
+_SUFFIX = nss_paths.TRIAL_SET_SUFFIX[TRIAL_SET] + nss_paths.BLINK_SUFFIX[BLINK_MODE]
 OUTPUT_PLOT = OUTPUT_DIR / (
     f"NSS_CrossPhase_Violin_byAwareness_unconsciousOnly{_SUFFIX}.png"
     if UNCONSCIOUS_ONLY else

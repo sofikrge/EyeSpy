@@ -2,13 +2,15 @@
 Shared Mooney-split / trial-set selection and output paths for the NSS pipeline.
 
 Every NSS script that reads or writes the *cross-phase* outputs calls `select()`
-at startup, which prompts once for the Mooney-window mode ("whole" or "halves")
-and once for the trial set ("all" or "experiment"-block-only trials), so you can
-never run a script against the wrong version by forgetting a setting.
+at startup, which prompts once for the Mooney-window mode ("whole" or "halves"),
+once for the trial set ("all" or "experiment"-block-only trials) and once for the
+blink mode ("filter" = original event-drop, or "interp" = PCHIP-interpolated blinks),
+so you can never run a script against the wrong version by forgetting a setting.
 
 Folder layout (relative to the project root, where these scripts are run from).
-<suffix> is "" for trial_set=all, "_exponly" for trial_set=experiment and
-"_extraonly" for trial_set=extra:
+<suffix> concatenates the trial-set suffix ("" for all, "_exponly" for experiment,
+"_extraonly" for extra) and then the blink-mode suffix ("" for filter, "_interp" for
+interp) — e.g. "", "_interp", "_exponly", "_exponly_interp":
 
     analysesresults/NSS<suffix>/            shared across Mooney modes
         FixMaps_full.pkl
@@ -25,9 +27,9 @@ The trial set, however, changes the input fixations themselves (Extra-block
 trials are dropped entirely), so *everything* — FixMaps, within-phase and
 cross-phase — is versioned by it.
 
-Non-interactive override: set the MOONEY_SPLIT ("whole"/"halves") and TRIAL_SET
-("all"/"experiment"/"extra") environment variables to skip the prompts (handy
-for scripted/batch runs).
+Non-interactive override: set the MOONEY_SPLIT ("whole"/"halves"), TRIAL_SET
+("all"/"experiment"/"extra") and BLINK_MODE ("filter"/"interp") environment
+variables to skip the prompts (handy for scripted/batch runs).
 """
 
 from pathlib import Path
@@ -36,10 +38,16 @@ import sys
 
 VALID = ("whole", "halves")
 VALID_TRIAL_SET = ("all", "experiment", "extra")
+VALID_BLINK = ("filter", "interp")
 
 # Folder suffix per trial set (single source of truth — used both to resolve
 # output paths and to name plot files, so the two never drift apart).
 TRIAL_SET_SUFFIX = {"all": "", "experiment": "_exponly", "extra": "_extraonly"}
+
+# Folder suffix per blink-handling mode of the Stage-1 parquet. "filter" (blinks
+# dropped, original pipeline) gets no suffix so existing folders stay valid; "interp"
+# (blinks PCHIP-interpolated) writes to *_interp folders so both can coexist on disk.
+BLINK_SUFFIX = {"filter": "", "interp": "_interp"}
 
 
 def _no_tty_exit(var: str, values: tuple) -> None:
@@ -85,19 +93,45 @@ def ask_trial_set() -> str:
         print("  Please type 'a' (all), 'e' (experiment-block only) or 'x' (extra-block only).")
 
 
-def paths_for(mooney_split: str, trial_set: str = "all") -> dict:
-    """Resolve every NSS output path for the given mode/trial set and ensure the folder exists."""
+def ask_blink_mode() -> str:
+    """Return "filter"/"interp" from $BLINK_MODE if set, otherwise prompt the user.
+
+    Must match how Stage 1 built the parquet ("filter" = blinks dropped, the original
+    pipeline; "interp" = blinks PCHIP-interpolated). It is not recorded in the parquet,
+    so choosing it here both selects the *_interp output folder and lets NSS.py stamp it
+    into the cache meta.
+    """
+    env = os.environ.get("BLINK_MODE", "").strip().lower()
+    if env in VALID_BLINK:
+        print(f"[nss_paths] BLINK_MODE = {env}  (from environment)")
+        return env
+    if not (sys.stdin and sys.stdin.isatty()):
+        _no_tty_exit("BLINK_MODE", VALID_BLINK)
+    while True:
+        answer = input("Which blink handling? [f]ilter (drop, original) / [i]nterp (PCHIP): ").strip().lower()
+        if answer in ("f", "filter"):
+            return "filter"
+        if answer in ("i", "interp"):
+            return "interp"
+        print("  Please type 'f' (filter) or 'i' (interp).")
+
+
+def paths_for(mooney_split: str, trial_set: str = "all", blink_mode: str = "filter") -> dict:
+    """Resolve every NSS output path for the given mode/trial set/blink mode and ensure the folder exists."""
     if mooney_split not in VALID:
         raise ValueError(f"mooney_split must be one of {VALID}, got {mooney_split!r}")
     if trial_set not in VALID_TRIAL_SET:
         raise ValueError(f"trial_set must be one of {VALID_TRIAL_SET}, got {trial_set!r}")
-    suffix = TRIAL_SET_SUFFIX[trial_set]
+    if blink_mode not in VALID_BLINK:
+        raise ValueError(f"blink_mode must be one of {VALID_BLINK}, got {blink_mode!r}")
+    suffix = TRIAL_SET_SUFFIX[trial_set] + BLINK_SUFFIX[blink_mode]  # trial set, then blink mode
     shared_dir = Path(f"analysesresults/NSS{suffix}")  # mode-independent: FixMaps + within-phase
     out_dir = Path(f"analysesresults/NSS_{mooney_split}{suffix}")
     out_dir.mkdir(parents=True, exist_ok=True)
     return {
         "MOONEY_SPLIT": mooney_split,
         "TRIAL_SET": trial_set,
+        "BLINK_MODE": blink_mode,
         "SHARED_DIR": shared_dir,
         "OUTPUT_DIR": out_dir,
         # shared across Mooney modes (but per trial set)
@@ -132,5 +166,5 @@ def filter_trial_set(fixations_df, trial_set: str):
 
 
 def select() -> dict:
-    """Prompt (or read $MOONEY_SPLIT / $TRIAL_SET) and return the resolved path dict."""
-    return paths_for(ask_mooney_split(), ask_trial_set())
+    """Prompt (or read $MOONEY_SPLIT / $TRIAL_SET / $BLINK_MODE) and return the resolved path dict."""
+    return paths_for(ask_mooney_split(), ask_trial_set(), ask_blink_mode())

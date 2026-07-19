@@ -3,7 +3,6 @@ NSS (Normalized Scanpath Saliency) Analysis Module for Eye-Gaze Data
 """
 
 #%%
-import os
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -627,13 +626,11 @@ if __name__ == "__main__":
     OUTPUT_DIR = _P["OUTPUT_DIR"]
     _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
 
-    # How the parquet's blinks were handled in Stage 1 ("filter" = events overlapping
-    # blinks dropped; "interp" = position PCHIP-interpolated across short blink gaps).
-    # This isn't stored in the parquet, so set $BLINK_MODE to match how you ran Stage 1.
-    # It is recorded in every cache meta below so that switching blink mode forces a
-    # recompute instead of silently returning the other mode's cached results.
-    BLINK_MODE = os.environ.get("BLINK_MODE", "filter").strip().lower()
-    print(f"[NSS] BLINK_MODE = {BLINK_MODE}  (set $BLINK_MODE=filter|interp to match Stage 1)")
+    # Blink mode ("filter"/"interp") comes from nss_paths.select() (prompt or $BLINK_MODE);
+    # it already selected the matching *_interp output folder. We also stamp it into every
+    # cache meta below so switching blink mode forces a recompute instead of silently
+    # returning the other mode's cached pickle. Must match how Stage 1 built the parquet.
+    BLINK_MODE = _P["BLINK_MODE"]
 
     # ---- Build fixmaps ----
     # A single-block trial set (trial_set="experiment" or "extra") drops the other

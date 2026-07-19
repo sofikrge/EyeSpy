@@ -13,7 +13,8 @@ settings.dataset.load()
 #%% Optional blink interpolation (must run on raw pixels, before pix2deg)
 if settings.INTERPOLATE_BLINKS:
     settings.dataset = prep.interpolate_blink_gaps(
-        settings.dataset, settings.MAX_BLINK_INTERP_MS, settings.SCREEN["sampling_rate"])
+        settings.dataset, settings.MAX_BLINK_INTERP_MS,
+        settings.SCREEN["sampling_rate"], settings.BLINK_MARGIN_MS)
 
 #%% Preprocess
 print("\nConverting to visual degrees...")
