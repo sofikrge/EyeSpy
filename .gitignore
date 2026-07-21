@@ -6,6 +6,10 @@ dist/
 wheels/
 *.egg-info
 
+# Scratch / temp working files (never commit these)
+scratchpad_*
+*.npz
+
 # Virtual environments
 .venv
 

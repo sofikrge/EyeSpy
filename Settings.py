@@ -76,17 +76,19 @@ BUFFER_SAC = 60   # 50ms + 10ms for saccades
 #                                 blink gaps before event detection, so a blink-spanning
 #                                 fixation stays one continuous fixation. The blink
 #                                 event-drop step is then skipped (spatial filtering is kept).
-# Following Dankner, Shalev & Carrasco (2017, Psych Sci), each blink is widened by
-# BLINK_MARGIN_MS on both sides before interpolation (the samples flanking a blink are
-# unreliable) and the whole region is PCHIP-interpolated.
-# Only gaps up to MAX_BLINK_INTERP_MS (raw blink length, before the margin) are filled;
-# longer gaps are treated as track loss, left as-is, and their events dropped as before.
-# 500 ms is the field-standard cap (Kret & Sjak-Shie 2019) and sits in the trough of this
-# dataset's blink-duration distribution. Dankner et al. used no cap, but their data was
-# epoched so gap length was naturally bounded; ours is continuous (25-min track losses exist).
+# This interpolation mode is a data-justified robustness alternative to the primary
+# (preregistered) blink-FILTER method above, not a replication of any one study. Each blink
+# is widened by BLINK_MARGIN_MS on both sides (peri-blink samples are unreliable) and the
+# region is filled with a shape-preserving PCHIP curve. The 200 ms margin is validated on
+# THIS dataset's own peri-blink contamination profile (pupil + gaze velocity recover ~150 ms
+# after a blink; see DataQualityChecks), not borrowed wholesale. Only blinks whose raw length
+# (before the margin) is <= MAX_BLINK_INTERP_MS are filled; longer runs are track loss, left
+# as-is (500 ms sits in the trough of this dataset's blink-duration distribution). The
+# PCHIP + peri-blink-margin technique is standard (see Dankner et al. 2017; Kret & Sjak-Shie
+# 2019), but the parameters here rest on this study's data.
 INTERPOLATE_BLINKS = False
 MAX_BLINK_INTERP_MS = 500
-BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (Dankner et al. 2017)
+BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (validated on this dataset)
 
 IMAGE_SIZE_DEG = (9.99, 7.50)
 CENTER_RADIUS_DG = 1.5 #shaked's value

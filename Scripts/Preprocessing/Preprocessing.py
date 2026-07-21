@@ -71,10 +71,14 @@ def interpolate_blink_gaps(dataset, max_gap_ms, sampling_rate=1000, margin_ms=20
     """
     Interpolate gaze POSITION across short blink gaps, in place, before velocity/event
     detection, using a shape-preserving piecewise cubic Hermite polynomial (PCHIP, i.e.
-    MATLAB's `pchip`), following Dankner, Shalev & Carrasco (2017). During a blink EyeLink
-    logs no position, so pymovements loads those samples as null in the 'pixel' column.
-    Each blink is widened by `margin_ms` on both sides (the flanking samples are unreliable)
-    and the whole region is bridged with a PCHIP curve fitted to the remaining valid samples.
+    MATLAB's `pchip`). This is a data-justified robustness alternative to the primary
+    blink-filter method, not a replication of one study; the PCHIP + peri-blink-margin
+    technique is standard (cf. Dankner et al. 2017; Kret & Sjak-Shie 2019), while the
+    `margin_ms` value is validated on this dataset's own peri-blink contamination profile.
+    During a blink EyeLink logs no position, so pymovements loads those samples as null in
+    the 'pixel' column. Each blink is widened by `margin_ms` on both sides (the flanking
+    samples are unreliable) and the region is bridged with a PCHIP curve fitted to the
+    remaining valid samples.
 
     Only blinks whose RAW length (before the margin) is <= `max_gap_ms` are filled. Longer
     null runs are treated as track loss (not a real blink), left as-is, so their events are
