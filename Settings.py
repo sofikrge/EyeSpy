@@ -93,7 +93,7 @@ BUFFER_SAC = 60   # 50ms + 10ms for saccades
 # interpolation should NOT bridge for a location-based DV). The PCHIP + peri-blink-margin
 # technique is standard (see Dankner et al. 2017; Kret & Sjak-Shie 2019 -- both pupil), but
 # the parameters here rest on this study's data.
-INTERPOLATE_BLINKS = True
+INTERPOLATE_BLINKS = False
 MAX_BLINK_INTERP_MS = 150
 BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (validated on this dataset)
 
@@ -129,8 +129,8 @@ MAT_FIELD_MAP = {
     'response_PAS_Q': 'response_PAS_Q',
 }
 
-EXCLUDE_SUBJECTS = [
-    104, 106, 109, 110, 112, 118, 120,  # left-eye tracked (both C and U sessions)
+EXCLUDE_SUBJECTS = [ 119, #unfocused eyes a lot and only told me after the 6th block
+104, 106, 109, 110, 112, 118, 120, # left dominant eye
 ]
 
 # Format: { ParticipantID: ['SessionLetter'] }
@@ -140,6 +140,8 @@ EXCLUDE_SESSIONS = {
 #    106: ['U'], # unfocused eyes sometimes
     107: ['U'], # low PAS 0 trials
     111: ['U'], # low PAS 0 trials
+    110: ['U'], # low PAS 0 trials
+    118: ['U'], # low PAS 0 trials
 #    112: ['C'], # unfocused eyes sometimes
 }
 
