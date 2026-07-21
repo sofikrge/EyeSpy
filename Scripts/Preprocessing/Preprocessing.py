@@ -42,15 +42,31 @@ def _missing_run_lengths(mask):
         run_len[start:end] = end - start
     return run_len
 
+def _nearest_anchor_index(anchor):
+    """For each sample, the index of the nearest anchor (valid, fittable) sample to its
+    left and to its right (-1 / len when none on that side). Running max/min over anchor
+    indices; used to measure how far apart the two anchors bracketing a fill sample are."""
+    n = len(anchor)
+    idx = np.arange(n)
+    left  = np.maximum.accumulate(np.where(anchor, idx, -1))          # nearest anchor at <= i
+    right = np.minimum.accumulate(np.where(anchor, idx, n)[::-1])[::-1]  # nearest anchor at >= i
+    return left, right
+
 def _interpolate_segment(t_seg, coord_views, max_gap_samples, margin_samples):
     """PCHIP-fill short blink gaps within ONE contiguous recording segment, in place.
 
     `coord_views` are numpy views into the per-coordinate arrays for this segment, so
     writing into them updates the parent arrays. A blink is widened by `margin_samples`
     on each side and bridged with a shape-preserving cubic (PCHIP). A blink reaching a
-    segment edge with valid data on only one side is left as-is (PCHIP won't extrapolate).
+    segment edge with valid data on only one side is left as-is (PCHIP won't extrapolate),
+    and a blink sitting right next to a long track-loss is left as-is too (see `local`
+    below) so the curve never bridges across the track-loss and fabricates position.
     """
-    missing = np.isnan(coord_views[0])           # in a blink all coordinates drop out together
+    # Missing = the tracked eye is absent. In a binocular recording the untracked eye is
+    # null throughout, so 'all coordinates NaN' isolates the tracked eye's blinks/losses
+    # regardless of which eye it is or the pixel-column order (keying off coord 0 alone
+    # would treat a left-eye session -- coord 0 = right eye, all null -- as one giant gap).
+    missing = np.stack([np.isnan(c) for c in coord_views]).all(axis=0)
     run_len = _missing_run_lengths(missing)
     short_blink = missing & (run_len <= max_gap_samples)   # real blinks -> fill
     long_gap    = missing & (run_len >  max_gap_samples)   # track loss  -> never fill
@@ -60,11 +76,20 @@ def _interpolate_segment(t_seg, coord_views, max_gap_samples, margin_samples):
         fill_region = binary_dilation(short_blink, iterations=margin_samples) & ~long_gap
     else:
         fill_region = short_blink & ~long_gap
+    # Widest legitimate fill is one capped blink dilated by the margin on each side, so its
+    # bracketing anchors are that far apart (+1 for the flanking samples). If a fill sample's
+    # two anchors are further apart than that, a long track-loss lies between them and the
+    # PCHIP would bridge across it -> skip (leave as gap; its events drop downstream). This
+    # also drops tightly clustered blinks (< 2*margin apart, merged by dilation) -- ~700 ms
+    # of mostly peri-blink data we would rather not fabricate than bridge.
+    max_bridge = max_gap_samples + 2 * margin_samples + 1
     for v in coord_views:
         anchor = ~np.isnan(v) & ~fill_region     # fit on valid samples outside the fill region
         if anchor.sum() >= 2:                    # PCHIP needs at least two anchors
             curve = PchipInterpolator(t_seg[anchor], v[anchor], extrapolate=False)(t_seg)
-            fill_here = fill_region & np.isfinite(curve)  # isfinite drops edges PCHIP can't reach
+            left, right = _nearest_anchor_index(anchor)
+            local = (right - left) <= max_bridge          # anchors bracket only a short gap
+            fill_here = fill_region & np.isfinite(curve) & local  # isfinite drops PCHIP-unreachable edges
             v[fill_here] = curve[fill_here]
 
 def interpolate_blink_gaps(dataset, max_gap_ms, sampling_rate=1000, margin_ms=200):

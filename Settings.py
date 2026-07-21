@@ -83,11 +83,18 @@ BUFFER_SAC = 60   # 50ms + 10ms for saccades
 # THIS dataset's own peri-blink contamination profile (pupil + gaze velocity recover ~150 ms
 # after a blink; see DataQualityChecks), not borrowed wholesale. Only blinks whose raw length
 # (before the margin) is <= MAX_BLINK_INTERP_MS are filled; longer runs are track loss, left
-# as-is (500 ms sits in the trough of this dataset's blink-duration distribution). The
-# PCHIP + peri-blink-margin technique is standard (see Dankner et al. 2017; Kret & Sjak-Shie
-# 2019), but the parameters here rest on this study's data.
-INTERPOLATE_BLINKS = False
-MAX_BLINK_INTERP_MS = 500
+# as-is. The 150 ms cap is the upper bound supported for GAZE-POSITION (not pupil)
+# interpolation: Tobii's I-VT gap fill-in defaults to 75 ms and must stay "shorter than a
+# blink", and Wass, Smith & Johnson (2013) interpolate position up to 150 ms. It sits well
+# above this dataset's median blink (~89 ms over the 24 analysed sessions), so it rescues the
+# large majority (~77%) of genuine short blinks while refusing to fabricate gaze across the
+# 150-500 ms range, which are full eyelid closures where the eye can move behind the lid
+# (raising 150 -> 500 ms rescues only those ~1,500 longer blinks, exactly the ones position
+# interpolation should NOT bridge for a location-based DV). The PCHIP + peri-blink-margin
+# technique is standard (see Dankner et al. 2017; Kret & Sjak-Shie 2019 -- both pupil), but
+# the parameters here rest on this study's data.
+INTERPOLATE_BLINKS = True
+MAX_BLINK_INTERP_MS = 150
 BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (validated on this dataset)
 
 IMAGE_SIZE_DEG = (9.99, 7.50)
