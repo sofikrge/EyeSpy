@@ -24,7 +24,7 @@ SIGMA               = MASK_PPD / 2.0 # blurring radius
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
-MIN_IMAGES_PER_CELL_CROSS = 15 # cross-phase NSS: drop a participant's awareness×reference cell if it has fewer valid scores
+MIN_IMAGES_PER_CELL_CROSS = 0 # cross-phase NSS: drop a participant's awareness×reference cell if it has fewer valid scores
 
 NAN_POLICY_CROSS         = "permissive"  # or "matlab_strict"
 

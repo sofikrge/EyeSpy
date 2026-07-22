@@ -63,13 +63,23 @@ if UNCONSCIOUS_ONLY:
     GROUP_ORDER = ["Unconscious Aware\n(PAS 2-3)", "Unconscious Unaware\n(PAS 0)"]
 
 
-# Model EMMs pasted in by hand from the lmer fitted on the ALL-trials data —
-# only drawn when TRIAL_SET == "all" (paste experiment-only EMMs here and extend
-# the check if you fit that model).
+# Model EMMs pasted in by hand from the fitted lmer. Drawn whenever DRAW_EMMS is True,
+# regardless of TRIAL_SET / BLINK_MODE — YOU are responsible for pasting the EMMs that
+# match the model you actually ran. Set DRAW_EMMS = False to hide the diamonds.
+DRAW_EMMS = True
+
+# With image filtering
+#EMMS = {
+#    "Conscious Aware\n(PAS 2-3)":     {"Intact": 2.21, "Scrambled": 1.23},
+#    "Unconscious Aware\n(PAS 2-3)":   {"Intact": 2.04, "Scrambled": 1.60},
+#    "Unconscious Unaware\n(PAS 0)":   {"Intact": 2.10, "Scrambled": 2.31}
+#}
+
+# Without image filtering
 EMMS = {
     "Conscious Aware\n(PAS 2-3)":     {"Intact": 2.21, "Scrambled": 1.23},
-    "Unconscious Aware\n(PAS 2-3)":   {"Intact": 1.81, "Scrambled": 1.22},
-    "Unconscious Unaware\n(PAS 0)":   {"Intact": 1.94, "Scrambled": 2.20}
+    "Unconscious Aware\n(PAS 2-3)":   {"Intact": 2.06, "Scrambled": 1.69},
+    "Unconscious Unaware\n(PAS 0)":   {"Intact": 2.07, "Scrambled": 2.32}
 }
 
 DOT_OFFSET = 0.17  # horizontal nudge so dots sit under each half-violin; tweak if misaligned
@@ -122,10 +132,10 @@ def main():
     ax.scatter(df_agg["x_pos"], df_agg["NSS"], color="grey", 
                linewidth=0.5, s=20, alpha=0.8, zorder=3)
 
-    # The pasted EMMs come from the ALL-trials, FILTER-mode lmer, so only overlay them there.
-    _draw_emms = (TRIAL_SET == "all" and BLINK_MODE == "filter")
+    # Overlay the hand-pasted EMM diamonds whenever DRAW_EMMS is on (mode-independent).
+    _draw_emms = DRAW_EMMS
     if not _draw_emms:
-        print("Skipping EMM diamonds: the pasted EMMs come from the all-trials, filter-mode model.")
+        print("Skipping EMM diamonds: DRAW_EMMS is False.")
     for group in (GROUP_ORDER if _draw_emms else []):
         for ref in ["Intact", "Scrambled"]:
             # Reconstruct the exact X position for this specific violin half
@@ -166,7 +176,9 @@ def main():
 
     # Drop the duplicate legend entries created by stripplot, keep only the violin's
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(title="Reference Map", loc="upper right", frameon=False)
+    # Place the legend outside the axes (right side) so it never overlaps the data points.
+    ax.legend(title="Disambiguator Type", loc="upper left",
+              bbox_to_anchor=(1.02, 1.0), frameon=False)
 
     ax.set_xlabel("")
     ax.set_ylabel("NSS")

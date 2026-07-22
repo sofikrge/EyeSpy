@@ -93,7 +93,7 @@ BUFFER_SAC = 60   # 50ms + 10ms for saccades
 # interpolation should NOT bridge for a location-based DV). The PCHIP + peri-blink-margin
 # technique is standard (see Dankner et al. 2017; Kret & Sjak-Shie 2019 -- both pupil), but
 # the parameters here rest on this study's data.
-INTERPOLATE_BLINKS = False
+INTERPOLATE_BLINKS = True
 MAX_BLINK_INTERP_MS = 150
 BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (validated on this dataset)
 
