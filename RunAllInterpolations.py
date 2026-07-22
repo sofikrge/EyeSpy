@@ -18,7 +18,7 @@ SETTINGS = ROOT / "Settings.py"
 # (label, INTERPOLATE_BLINKS value, BLINK_MODE for Stage 2)
 PASSES = [
     ("blink interpolation", True, "interp"),
-    ("blink filtering", False, "filter"),
+   #  ("blink filtering", False, "filter"),
 ]
 
 # Scripts to run in order, after Settings.py is set for the pass.

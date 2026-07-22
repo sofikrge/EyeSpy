@@ -24,6 +24,7 @@ SIGMA               = MASK_PPD / 2.0 # blurring radius
 
 MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
 MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
+MIN_IMAGES_PER_CELL_CROSS = 15 # cross-phase NSS: drop a participant's awareness×reference cell if it has fewer valid scores
 
 NAN_POLICY_CROSS         = "permissive"  # or "matlab_strict"
 
@@ -872,8 +873,18 @@ if __name__ == "__main__":
         var_name='ReferenceMap', 
         value_name='NSS'
     )
-    # Clean the names 
+    # Clean the names
     df_long_fully_melted['ReferenceMap'] = df_long_fully_melted['ReferenceMap'].str.replace('NSS_', '')
+
+    # Drop thin participant×awareness×reference cells (e.g. a UU participant with only
+    # 2 valid Intact scores loses their Intact rows, not their Scrambled rows).
+    # transform('count') counts non-NaN NSS per cell — matches Jamovi's descriptive N.
+    _cell = ['Participant', 'Awareness', 'ReferenceMap']
+    _n_valid = df_long_fully_melted.groupby(_cell)['NSS'].transform('count')
+    _before = len(df_long_fully_melted)
+    df_long_fully_melted = df_long_fully_melted[_n_valid >= MIN_IMAGES_PER_CELL_CROSS].reset_index(drop=True)
+    print(f"[Cell filter] Removed {_before - len(df_long_fully_melted)} rows "
+          f"from cells with < {MIN_IMAGES_PER_CELL_CROSS} valid scores.")
 
     cross_long_path = _P["CROSS_CSV"]  # per-mode
     df_long_fully_melted.to_csv(cross_long_path, index=False)
