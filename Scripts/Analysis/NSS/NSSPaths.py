@@ -10,7 +10,7 @@ so you can never run a script against the wrong version by forgetting a setting.
 Folder layout (relative to the project root, where these scripts are run from).
 <suffix> concatenates the trial-set suffix ("" for all, "_exponly" for experiment,
 "_extraonly" for extra) and then the blink-mode suffix ("" for filter, "_interp" for
-interp) — e.g. "", "_interp", "_exponly", "_exponly_interp":
+interp). For example "", "_interp", "_exponly", "_exponly_interp":
 
     analysesresults/NSS<suffix>/            shared across Mooney modes
         FixMaps_full.pkl
@@ -24,8 +24,8 @@ interp) — e.g. "", "_interp", "_exponly", "_exponly_interp":
 Only the cross-phase step depends on the Mooney split, so FixMaps and the
 within-phase results are shared across modes (and never rebuilt when you switch).
 The trial set, however, changes the input fixations themselves (Extra-block
-trials are dropped entirely), so *everything* — FixMaps, within-phase and
-cross-phase — is versioned by it.
+trials are dropped entirely), so everything is versioned by it: FixMaps, within-phase
+and cross-phase.
 
 Non-interactive override: set the MOONEY_SPLIT ("whole"/"halves"), TRIAL_SET
 ("all"/"experiment"/"extra") and BLINK_MODE ("filter"/"interp") environment
@@ -40,7 +40,7 @@ VALID = ("whole", "halves")
 VALID_TRIAL_SET = ("all", "experiment", "extra")
 VALID_BLINK = ("filter", "interp")
 
-# Folder suffix per trial set (single source of truth — used both to resolve
+# Folder suffix per trial set (single source of truth, used both to resolve
 # output paths and to name plot files, so the two never drift apart).
 TRIAL_SET_SUFFIX = {"all": "", "experiment": "_exponly", "extra": "_extraonly"}
 
@@ -61,7 +61,7 @@ def ask_mooney_split() -> str:
     """Return "whole"/"halves" from $MOONEY_SPLIT if set, otherwise prompt the user."""
     env = os.environ.get("MOONEY_SPLIT", "").strip().lower()
     if env in VALID:
-        print(f"[nss_paths] MOONEY_SPLIT = {env}  (from environment)")
+        print(f"[NSSPaths] MOONEY_SPLIT = {env}  (from environment)")
         return env
     if not (sys.stdin and sys.stdin.isatty()):
         _no_tty_exit("MOONEY_SPLIT", VALID)
@@ -78,7 +78,7 @@ def ask_trial_set() -> str:
     """Return "all"/"experiment"/"extra" from $TRIAL_SET if set, otherwise prompt the user."""
     env = os.environ.get("TRIAL_SET", "").strip().lower()
     if env in VALID_TRIAL_SET:
-        print(f"[nss_paths] TRIAL_SET = {env}  (from environment)")
+        print(f"[NSSPaths] TRIAL_SET = {env}  (from environment)")
         return env
     if not (sys.stdin and sys.stdin.isatty()):
         _no_tty_exit("TRIAL_SET", VALID_TRIAL_SET)
@@ -103,7 +103,7 @@ def ask_blink_mode() -> str:
     """
     env = os.environ.get("BLINK_MODE", "").strip().lower()
     if env in VALID_BLINK:
-        print(f"[nss_paths] BLINK_MODE = {env}  (from environment)")
+        print(f"[NSSPaths] BLINK_MODE = {env}  (from environment)")
         return env
     if not (sys.stdin and sys.stdin.isatty()):
         _no_tty_exit("BLINK_MODE", VALID_BLINK)
@@ -150,7 +150,7 @@ def filter_trial_set(fixations_df, trial_set: str):
 
     "all" returns the frame untouched; "experiment" keeps only Experiment-block
     fixations and "extra" keeps only Extra-block fixations. Both single-block sets
-    need the parquet's block_type column — rerun NSSExporter.py if it is missing.
+    need the parquet's block_type column; rerun NSSExporter.py if it is missing.
     """
     if trial_set == "all":
         return fixations_df
@@ -161,7 +161,7 @@ def filter_trial_set(fixations_df, trial_set: str):
             "parquet. Rerun Scripts/Analysis/NSS/NSSExporter.py to regenerate it."
         )
     out = fixations_df[fixations_df["block_type"] == block]
-    print(f"[nss_paths] trial set '{trial_set}': kept {len(out)} / {len(fixations_df)} fixations ({block} block only)")
+    print(f"[NSSPaths] trial set '{trial_set}': kept {len(out)} / {len(fixations_df)} fixations ({block} block only)")
     return out
 
 

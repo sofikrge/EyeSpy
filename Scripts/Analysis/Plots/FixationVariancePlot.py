@@ -1,31 +1,31 @@
-# FixationVariancePlot.py
+"""Where and how widely participants fixate, by awareness state and image type.
 
-"""
-Exploration / spread plots by Awareness State and Image Type
-============================================================
-Same figure setup as CrossNSSViolinPlot.py, but the y-axis describes where/how
-spread-out participants fixate, NOT cross-phase NSS. Two figures:
+Same figure setup as CrossNSSViolinPlot.py, but the y-axis describes fixation
+spread rather than cross-phase NSS. Two figures:
 
-  1. Distance from centre  - "do they explore the whole stimulus or only its centre?"
+  1. Distance from centre  - do they explore the whole stimulus or only its centre?
   2. Spatial variance      - variance of fixation locations; low variance can have
-                             strange effects on correlations (professor's main ask).
+                             strange effects on correlations, so it is worth ruling
+                             out as an explanation for the NSS differences.
 
 Both use the fixation locations already in the parquet ((0, 0) = image centre):
   distance = hypot(x, y)          per fixation, then averaged per participant
   variance = Var(x) + Var(y)      across a participant's fixations of that type
 
-Input : data/NSS_all_fixations_clean.parquet  (one row per fixation, NSSExporter.py)
-Output: Figures/nss_analyses/FixationEccentricity_byAwareness.png
+Reads:  data/NSS_all_fixations_clean.parquet   (one row per fixation, NSSExporter.py)
+Writes: Figures/nss_analyses/FixationEccentricity_byAwareness.png
         Figures/nss_analyses/FixationSpatialVariance_byAwareness.png
 """
 
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-INPUT_FILE = Path("data/NSS_all_fixations_clean.parquet")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
+from Settings import FIX_FILE as INPUT_FILE
 OUTPUT_DIR = Path("Figures/nss_analyses"); OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GROUP_MAP = {
@@ -76,7 +76,7 @@ def plot(agg, col, ylabel, title, out_name):
     out = OUTPUT_DIR / out_name
     plt.savefig(out, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved → {out}")
+    print(f"Saved -> {out}")
 
 
 def main():

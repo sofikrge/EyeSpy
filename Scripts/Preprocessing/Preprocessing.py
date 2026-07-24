@@ -1,9 +1,21 @@
-# Preprocessing.py
+"""The project's own Stage-1 steps, called from RunPreprocessing.py in this order:
+
+    interpolate_blink_gaps            optional, before pix2deg: PCHIP-fill short blinks
+    shift_gaze_offset                 correct the per-eye offset
+    filter_and_report_validations     drop sessions failing the accuracy thresholds
+    filter_events_blink_spatial       drop blink-overlapping and out-of-bounds events
+    assign_trial_metadata_and_phases  attach trial metadata + label each event's phase
+    apply_behavioral_filters_and_save exclusions, derive `awareness`, write the CSVs
+
+Everything pymovements can do (loading, pix2deg, pos2vel, event detection) stays in
+RunPreprocessing.py; this module is what the library does not cover. All parameters
+come from Settings.py.
+"""
 
 from Settings import EYE_OFFSET, FILTER_PALETTE, PHASE_PALETTE, MAT_FIELD_MAP
 import polars as pl
 import os
-import Scripts.Preprocessing.Plots as plots
+import Scripts.Preprocessing.QualityPlots as plots
 import copy
 from pathlib import Path
 import numpy as np
@@ -217,7 +229,7 @@ def filter_events_blink_spatial(dataset, raw_data_dir, buffer_fix, buffer_sac,
     blink-overlap drop is skipped and only the spatial filtering is applied.
     """
 
-    print("\nBlink and Spatial Filtering of Events...")
+    print("\nFiltering events (blinks and spatial bounds)...")
     os.makedirs(data_quality_folder, exist_ok=True)
 
     # Only keep a pre-filter copy if we're actually going to plot it
@@ -382,7 +394,7 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
         # Check for mismatches
         n_missing = df_trials_combined.filter(pl.col("ImageName").is_null()).height
         if n_missing > 0:
-            print(f"WARNING: {n_missing} trials missing behavioral data after merge!")
+            print(f"WARNING: {n_missing} trials missing behavioural data after merge.")
             print("   This may indicate ordinal mismatch between ASC and MAT files.")
 
         if not df_beh.is_empty():

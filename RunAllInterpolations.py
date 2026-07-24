@@ -1,7 +1,7 @@
 """Run the full pipeline twice: once with blink interpolation, once with blink filtering.
 
 For each pass we (1) set INTERPOLATE_BLINKS in Settings.py accordingly, then run
-Stage 1 (RunningScript.py) -> NSSExporter.py -> NSS.py with the matching Stage-2
+Stage 1 (RunPreprocessing.py) -> NSSExporter.py -> NSS.py with the matching Stage-2
 settings: MOONEY_SPLIT=whole, TRIAL_SET=all, BLINK_MODE=interp|filter.
 
 Run from the project root:  python3 RunAllInterpolations.py
@@ -22,7 +22,7 @@ PASSES = [
 ]
 
 # Scripts to run in order, after Settings.py is set for the pass.
-STAGE1 = ROOT / "RunningScript.py"
+STAGE1 = ROOT / "RunPreprocessing.py"
 NSS_SCRIPTS = [
     ROOT / "Scripts/Analysis/NSS/NSSExporter.py",
     ROOT / "Scripts/Analysis/NSS/NSS.py",

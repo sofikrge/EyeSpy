@@ -1,20 +1,19 @@
-# BlinkDurationDistribution.py
-"""
-Diagnostic 1/3 for the blink-INTERPOLATION preprocessing option.
+"""Where should interpolation be capped?  (blink-interpolation diagnostic 1 of 3)
 
-Question it answers: "where should we cap interpolation?" i.e. which blinks are real
-blinks (worth interpolating) vs long track losses (must be left as gaps). Justifies
-Settings.MAX_BLINK_INTERP_MS.
+Which blinks are real blinks, worth interpolating, and which are long track losses that
+must be left as gaps? Justifies Settings.MAX_BLINK_INTERP_MS.
 
 It reads every raw .asc, takes each EyeLink blink (EBLINK marker) duration, and reports
 the pooled distribution + the fraction of blinks above candidate caps + a histogram. The
 distribution is bimodal: a physiological-blink mode (~50-150 ms) and a long track-loss
 tail; the chosen cap should sit in the trough between them.
 
-Outputs (under DataQualityChecks/blink_interpolation/):
+Reads the raw .asc files directly, so it needs no pipeline run. From the project root:
+    python3 Scripts/Preprocessing/Diagnostics/BlinkDurationDistribution.py
+
+Writes (under DataQualityChecks/blink_interpolation/):
     blink_duration_distribution.csv   - histogram bins + summary percentiles
     blink_duration_histogram.png
-Run from the project root:  python3 Scripts/Preprocessing/Diagnostics/BlinkDurationDistribution.py
 """
 
 import sys
@@ -71,7 +70,7 @@ def main():
     ax.set_ylabel("blink count"); ax.set_xlabel("blink duration (ms)")
     # mark where the cap falls (between the 450-500 and 500-750 bins -> index 10 boundary)
     ax.axvline(9.5, color="#c1121f", ls="--", lw=1.5, label=f"interpolation cap = {CAP} ms")
-    ax.set_title(f"Blink-duration distribution (n={len(d)}) — cap sits in the trough before the track-loss tail")
+    ax.set_title(f"Blink-duration distribution (n={len(d)}): cap sits in the trough before the track-loss tail")
     ax.legend()
     fig.tight_layout(); fig.savefig(OUT / "blink_duration_histogram.png", dpi=130)
     print(f"Saved -> {OUT/'blink_duration_histogram.png'} and blink_duration_distribution.csv")

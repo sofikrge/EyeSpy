@@ -1,24 +1,27 @@
-"""
-Double group-mean centre the within-phase NSS ("gaze typicality") covariate.
+"""Double group-mean centre the within-phase NSS ("gaze typicality") covariate.
 
-Reads the cross-phase long-format results, removes the between-participant and
-between-image variance from Within-NSS-Typicality, and writes a new column
-`GazeTypicalityCentred` alongside the untouched original so the two can be
-compared in the mixed model.
+The cross-phase data is cross-classified: every row sits in both a participant and
+an image, so centring on one grouping alone leaves the other's variance in the
+covariate. Subtracting both group means isolates the within-cell component:
 
     x_within = x - x_participant - x_image + x_grand   (Guo et al., 2024)
 
-The original `Within-NSS-Typicality` column is left unchanged.
+The result goes in a new `GazeTypicalityCentred` column; the original
+`Within-NSS-Typicality` is left untouched so raw and centred models can be
+compared. In Jamovi, use the centred column with covariate scaling set to None.
+
+Reads:  analysesresults/NSS_<mode>/NSS_CrossPhase_LongFormat.csv          (NSS.py)
+Writes: analysesresults/NSS_<mode>/NSS_CrossPhase_LongFormat_centred.csv
 """
 
 import sys
 from pathlib import Path
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
-import nss_paths
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+from Scripts.Analysis.NSS import NSSPaths
 
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+_P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 IN_PATH = _P["CROSS_CSV"]
 OUT_PATH = _P["CROSS_CENTRED_CSV"]
 COL = "Within-NSS-Typicality"

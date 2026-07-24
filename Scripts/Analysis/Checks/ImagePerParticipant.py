@@ -1,30 +1,27 @@
-"""
-ImagePerParticipant.py
-----------------------
-Counts how many image entries each participant contributes to the cross-phase
-NSS analysis, broken down by awareness state and reference map (Intact / Scrambled).
+"""How many image entries does each participant contribute to the cross-phase NSS?
 
-Each row in the CSV is one scoring event (image x trial), so an image seen on two
-trials counts as two entries -- both are valid data points.
+One table per awareness state, split by reference map (Intact / Scrambled), with
+a "<--" marker on any participant below MIN_IMAGES. A quick way to spot who is thin
+enough to be worth a closer look in DiagnoseParticipantCoverage.py.
 
-Prints one easy-to-read table per awareness state, flagging any participant with
-fewer than MIN_IMAGES entries (per reference map) with a "<--" marker.
+Counts rows, i.e. scoring events (image x trial), so an image seen on two trials
+counts twice. Both are valid data points.
 
-Requires: analysesresults/NSS/NSS_CrossPhase_LongFormat.csv  (produced by NSS.py)
+Reads:  analysesresults/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
 """
 
 import sys
 from pathlib import Path
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
-import nss_paths
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+from Scripts.Analysis.NSS import NSSPaths
+_P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
 CROSS_CSV  = _P["CROSS_CSV"]
-MIN_IMAGES = 15  # participants below this (per reference map) are flagged
+from Settings import MIN_IMAGES_PER_PARTICIPANT as MIN_IMAGES  # flag anyone below this
 
-# ── Load and count image entries per participant × awareness × reference map ────
+# --- Load and count image entries per participant x awareness x reference map
 df = pd.read_csv(CROSS_CSV)
 
 counts = (
@@ -36,7 +33,7 @@ counts = (
 
 ref_maps = list(counts.columns)  # e.g. ["Intact", "Scrambled"]
 
-# ── Print one table per awareness state ─────────────────────────────────────────
+# --- Print one table per awareness state
 for awareness, group in counts.groupby(level="Awareness"):
     group = group.droplevel("Awareness")
 

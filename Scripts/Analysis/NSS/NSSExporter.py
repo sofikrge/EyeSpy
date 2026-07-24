@@ -1,22 +1,24 @@
-"""
-Processes cleaned eye-tracking fixation data from multiple participant CSV files
-and exports consolidated fixation data with image classification.
-This script:
-1. Reads cleaned event CSV files from data/events_cleaned/ (format: s_[session]_[participant].csv)
-2. Extracts participant and session metadata from filenames using regex
-3. Standardizes numeric columns to Float64 to prevent schema conflicts during concatenation
-4. Filters for fixation events and classifies images based on experimental phase and condition
-5. Extracts and normalizes gaze coordinates (x_deg_centered, y_deg)
-6. Exports processed fixations to a Parquet file for further analysis in NSSAnalyses script
-Output:
-    Parquet file with columns: ImageName, session, image_type, participant, x_deg_centered, y_deg,
-    condition, trial_number, awareness, Mooney_Half, block_type (Experiment / Extra)
-    Only includes fixations with valid image_type classifications (mooney, disamb_intact, disamb_not_intact)
-    trial_number is renumbered so it is unique within a session: Experiment trials keep
-    their number (1-133), Extra-block trials get +300 (301-452, matching session order).
-Note:
-    Requires prior execution of EyeDrops.py to generate input CSV files.
-    Handles mixed data types (Int64 vs Float64) in risky columns by casting to Float64.
+"""Stage 1 -> Stage 2 handoff: cleaned per-session event CSVs into one fixation parquet.
+
+Concatenates every s_<session>_<participant>.csv, keeps the fixations, and classifies
+each one by experimental phase and condition into the image_type the NSS analysis works
+in (mooney_post_intact / mooney_post_not_intact / disamb_intact / disamb_not_intact).
+Fixations that fall in no valid class are dropped.
+
+Two derived columns are added here rather than in NSS.py, because both need the phase
+boundaries that only Stage 1 carries:
+  - Mooney_Half   Early/Late half of the 3 s Mooney window, from onset - mooney_start.
+  - trial_number  renumbered to be unique within a session: Experiment trials keep
+                  1-133, Extra-block trials get +300 (301-452, so they also sort in
+                  true session order, the Extra block having run second).
+
+Numeric columns are cast to Float64 before concatenation, because sessions otherwise
+disagree on Int64 vs Float64 and the schemas will not merge.
+
+Reads:  data/events_cleaned/s_<session>_<participant>.csv   (RunPreprocessing.py)
+Writes: data/NSS_all_fixations_clean.parquet
+        columns: ImageName, session, image_type, participant, x_deg_centered, y_deg,
+                 condition, trial_number, awareness, Mooney_Half, block_type
 """
 
 import polars as pl
@@ -31,7 +33,7 @@ OUTPUT_FILE = "data/NSS_all_fixations_clean.parquet"
 # Group 1 = Session (Letters), Group 2 = Participant (Digits)
 FILENAME_PATTERN = re.compile(r"s_([A-Za-z]+)_(\d+)\.csv")
 
-print(f"\nStarting NSS Export from {INPUT_DIR}...")
+print(f"\nExporting fixations from {INPUT_DIR}...")
 
 dfs = []
 files = sorted([f for f in os.listdir(INPUT_DIR) if f.endswith(".csv")])
@@ -160,5 +162,5 @@ n_unknown = export_df.filter(pl.col("Mooney_Half") == "Unknown").height
 if n_unknown:
     print(f"WARNING: {n_unknown} Mooney fixations have a null mooney_start (Mooney_Half='Unknown').")
 
-print(f"Success! Exported {len(export_df)} rows to: {OUTPUT_FILE}")
+print(f"Exported {len(export_df)} rows to {OUTPUT_FILE}")
 print(export_df.head(5))

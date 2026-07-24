@@ -1,10 +1,7 @@
-# BlinkContaminationProfile.py
-"""
-Diagnostic 2/3 for the blink-INTERPOLATION preprocessing option.
+"""How big should the peri-blink margin be?  (blink-interpolation diagnostic 2 of 3)
 
-Question it answers: "how big should the peri-blink margin be?" i.e. how far before/after
-a blink is the gaze signal contaminated (so those samples must not anchor the interpolation).
-Justifies Settings.BLINK_MARGIN_MS.
+How far before and after a blink is the gaze signal contaminated, i.e. which samples
+must not be trusted to anchor the interpolation? Justifies Settings.BLINK_MARGIN_MS.
 
 Method: a blink-locked average. Every blink in every raw .asc is aligned to its onset (and
 separately to its offset), and pupil size + gaze speed are averaged across all blinks at each
@@ -15,11 +12,13 @@ symmetric margin must cover ~150 ms; 51 ms is too short, 200 ms clears it.
 Pupil during a blink is logged as 0 by EyeLink -> treated as missing here; position is '.'
 (-> NaN). Only windows that stay within one contiguous recording segment are averaged.
 
-Outputs (under DataQualityChecks/blink_interpolation/):
+Reads the raw .asc files directly, so it needs no pipeline run. It does read every
+sample, so allow ~2 min. From the project root:
+    python3 Scripts/Preprocessing/Diagnostics/BlinkContaminationProfile.py
+
+Writes (under DataQualityChecks/blink_interpolation/):
     blink_contamination_profile.png    - 2x2: pupil & gaze-speed, onset- and offset-locked
     blink_contamination_report.txt     - where the signal departs / recovers
-Run from the project root:  python3 Scripts/Preprocessing/Diagnostics/BlinkContaminationProfile.py
-(Reads all raw samples; takes ~2 min.)
 """
 
 import sys

@@ -1,4 +1,19 @@
-# Settings.py
+"""Single source of truth for the whole pipeline. This is the only file to edit.
+
+Both stages read their parameters from here and configure nothing themselves:
+
+    Stage 1 (preprocessing)   screen geometry, thresholds, blink handling, marker
+                              codes, exclusions, and the pymovements dataset
+    Stage 2 (NSS analysis)    canvas size, pixels-per-degree, subject thresholds
+
+Anything that varies per run rather than per project stays out of this file: the
+Mooney split, trial set and blink mode are chosen at runtime (see NSSPaths.py), and
+the output paths follow from them.
+
+One thing to know before changing anything: DEBUG gates I/O, not just logging. With
+DEBUG on, the intermediate data/events/ CSVs and every QC figure under
+DataQualityChecks/ get written.
+"""
 
 #%% Imports
 import os
@@ -8,7 +23,7 @@ import matplotlib.pyplot as plt
 import pymovements as pm
 from pathlib import Path
 
-#%% Settings
+#%% =========================== STAGE 1: PREPROCESSING ===========================
 
 DEBUG = True
 
@@ -48,8 +63,8 @@ dataset_definition = pm.DatasetDefinition(
 
 dataset = pm.Dataset(definition=dataset_definition, path=dataset_paths)
 
-# Folders
-data_quality_folder = 'DataQualityChecks/' ; os.makedirs(data_quality_folder, exist_ok=True)
+# Folders (each writer creates it on demand, so nothing is made just by importing)
+data_quality_folder = 'DataQualityChecks/'
 
 # Validation thresholds
 VALIDATION_ACCURACY_AVG_THRESHOLD = 1.0  # degrees
@@ -69,30 +84,36 @@ MIN_FIX_DURATION_MS = 50      # minimum fixation length
 BUFFER_FIX = 51   # 51ms for fixations
 BUFFER_SAC = 60   # 50ms + 10ms for saccades
 
-# Blink handling: two mutually exclusive modes.
-#   INTERPOLATE_BLINKS = False -> original behaviour: detect events first, then DROP
-#                                 any fixation/saccade overlapping a blink (filter_events_blink_spatial).
-#   INTERPOLATE_BLINKS = True  -> PCHIP-interpolate (shape-preserving cubic) the position ACROSS short
-#                                 blink gaps before event detection, so a blink-spanning
-#                                 fixation stays one continuous fixation. The blink
-#                                 event-drop step is then skipped (spatial filtering is kept).
-# This interpolation mode is a data-justified robustness alternative to the primary
-# (preregistered) blink-FILTER method above, not a replication of any one study. Each blink
-# is widened by BLINK_MARGIN_MS on both sides (peri-blink samples are unreliable) and the
-# region is filled with a shape-preserving PCHIP curve. The 200 ms margin is validated on
-# THIS dataset's own peri-blink contamination profile (pupil + gaze velocity recover ~150 ms
-# after a blink; see DataQualityChecks), not borrowed wholesale. Only blinks whose raw length
-# (before the margin) is <= MAX_BLINK_INTERP_MS are filled; longer runs are track loss, left
-# as-is. The 150 ms cap is the upper bound supported for GAZE-POSITION (not pupil)
-# interpolation: Tobii's I-VT gap fill-in defaults to 75 ms and must stay "shorter than a
-# blink", and Wass, Smith & Johnson (2013) interpolate position up to 150 ms. It sits well
-# above this dataset's median blink (~89 ms over the 24 analysed sessions), so it rescues the
-# large majority (~77%) of genuine short blinks while refusing to fabricate gaze across the
-# 150-500 ms range, which are full eyelid closures where the eye can move behind the lid
-# (raising 150 -> 500 ms rescues only those ~1,500 longer blinks, exactly the ones position
-# interpolation should NOT bridge for a location-based DV). The PCHIP + peri-blink-margin
-# technique is standard (see Dankner et al. 2017; Kret & Sjak-Shie 2019 -- both pupil), but
-# the parameters here rest on this study's data.
+# --- Blink handling: two mutually exclusive modes ----------------------------------
+#
+#   False -> the primary, preregistered method: detect events first, then DROP any
+#            fixation/saccade overlapping a blink (in filter_events_blink_spatial).
+#   True  -> PCHIP-interpolate (shape-preserving cubic) the position ACROSS short blink
+#            gaps before event detection, so a blink-spanning fixation stays one
+#            continuous fixation. The blink event-drop step is then skipped; the
+#            spatial filtering still applies.
+#
+# The interpolation mode is a data-justified robustness alternative to the filter method,
+# not a replication of any one study. Each blink is widened by BLINK_MARGIN_MS on both
+# sides (peri-blink samples are unreliable) and the region is filled with a PCHIP curve.
+#
+# Why a 200 ms margin: it is validated on THIS dataset's peri-blink contamination profile,
+# where pupil and gaze velocity recover ~150 ms after a blink (see the Diagnostics scripts
+# and DataQualityChecks/), rather than borrowed wholesale from another study.
+#
+# Why a 150 ms cap: only blinks whose raw length (before the margin) is <= this get
+# filled; anything longer is track loss and is left as a gap. 150 ms is the most
+# permissive value we found support for on GAZE POSITION rather than pupil: Tobii's I-VT
+# gap fill-in defaults to 75 ms and must stay "shorter than a blink", and Wass, Smith &
+# Johnson (2013) go to 150 ms. It sits well above this dataset's median blink (~89 ms
+# across the 24 analysed sessions), so it rescues ~77% of genuine short blinks while
+# refusing to fabricate gaze across the 150-500 ms range. Those are full eyelid closures
+# where the eye can move behind the lid, exactly what position interpolation must not
+# bridge when the DV is a location. (Raising the cap to 500 ms would rescue only those
+# ~1,500 longer blinks.)
+#
+# The PCHIP + peri-blink-margin technique itself is standard: Dankner et al. (2017),
+# Kret & Sjak-Shie (2019), both on pupil. See REFERENCES.md.
 INTERPOLATE_BLINKS = True
 MAX_BLINK_INTERP_MS = 150
 BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (validated on this dataset)
@@ -129,8 +150,8 @@ MAT_FIELD_MAP = {
     'response_PAS_Q': 'response_PAS_Q',
 }
 
-EXCLUDE_SUBJECTS = [ 119, #unfocused eyes a lot and only told me after the 6th block
-104, 106, 109, 110, 112, 118, 120, # left dominant eye
+EXCLUDE_SUBJECTS = [ 
+# 104, 106, 109, 110, 112, 118, 120, # left dominant eye
 ]
 
 # Format: { ParticipantID: ['SessionLetter'] }
@@ -150,9 +171,44 @@ EXCLUDE_SESSIONS = {
 EXCLUDE_BLOCKS = {
 #    112: {'U': [4, 5]},             # Unfocused eyes sometimes
     117: {'C': [1]},                # Technical mistake
-#    119: {'U': [1, 2, 3, 4, 5, 6]}  # Unfocused eyes sometimes
+    119: {'U': [1, 2, 3, 4, 5, 6]}  # Unfocused eyes sometimes
 }
 
-# PLotting colors
+# Plotting colours
 FILTER_PALETTE = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
 PHASE_PALETTE  = ['#b3cde3', '#8c96c6', '#88419d']
+
+
+#%% =========================== STAGE 2: NSS ANALYSIS ============================
+# Read by NSS.py and by the Checks/ and Plots/ scripts. 
+
+NSS_DEBUG = True   # separate from Stage 1's DEBUG: prints per-image NSS diagnostics
+
+# The fixation-map canvas. Not the screen resolution: fixations are mapped into this
+# eye-tracking canvas, with degree 0 at its centre.
+IMAGE_HEIGHT = 600
+IMAGE_WIDTH  = 800
+MASK_PPD     = 48.55            # pixels per visual degree
+SIGMA        = MASK_PPD / 2.0   # Gaussian blur radius for the fixation maps
+
+# Input parquet written by NSSExporter.py.
+FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")
+
+# How much data an image needs before it is scored at all.
+MIN_SUBJ_PER_IMAGE_NSS    = 2    # within-phase: minimum subjects per image
+MIN_SUBJ_PER_IMAGE_CROSS  = 2    # cross-phase: minimum Mooney subjects per image
+MIN_IMAGES_PER_CELL_CROSS = 15   # cross-phase: drop a participant's awareness x reference
+                                 # cell if it holds fewer valid scores than this
+
+# Missing reference maps in the cross-phase step:
+#   "permissive"    ignore a NaN reference and average whatever is present
+#   "matlab_strict" require both references, otherwise the image scores NaN
+NAN_POLICY_CROSS = "permissive"
+
+# 0 = population sd (the spread of the data present); set to 1 for sample sd.
+# 0 is what MATLAB's original implementation used, so leave it unless comparing.
+DISPERSION_DDOF = 0
+
+# Thresholds used only by the reporting scripts in Scripts/Analysis/Checks/.
+MIN_IMAGES_PER_PARTICIPANT = 15   # ImagePerParticipant.py flags anyone below this
+MIN_FIX_PER_PARTICIPANT    = 20   # LeftBiasPerParticipant.py ignores thinner cells

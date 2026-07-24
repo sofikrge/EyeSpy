@@ -1,4 +1,12 @@
-# Plots.py
+"""Quality-control figures for Stage 1, written to DataQualityChecks/.
+
+Called from Preprocessing.py at the points where data is dropped or reshaped, so each
+figure answers "did that step do what I think it did": validation accuracy per session,
+which events the blink/spatial filters removed, and whether the reconstructed trial
+phases line up with the MSG markers.
+
+All of it is gated by DEBUG in Settings.py. With DEBUG off, nothing here runs.
+"""
 
 #%% Imports
 import os

@@ -1,6 +1,18 @@
-# RunningScript.py
+"""Stage 1: raw EyeLink recordings -> cleaned fixation/saccade event tables.
+
+Top-to-bottom orchestration, written as `#%%` cells so it can also be stepped through
+in an interactive window. Every parameter comes from Settings.py; nothing is configured
+here. Run it from the project root:
+
+    python3 RunPreprocessing.py
+
+Reads:  data/my_dataset/raw/s_<SESSION>_<PID>.asc
+        data/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
+Writes: data/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
+        DataQualityChecks/  (figures, only when DEBUG is on in Settings.py)
+"""
+
 #%% Imports
-import pymovements as pm
 import Scripts.Preprocessing.Preprocessing as prep
 import Settings as settings
 

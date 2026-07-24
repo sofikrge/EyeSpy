@@ -1,14 +1,13 @@
-"""
-ParticipantsEffectUCUARanking.py
----------------------------------
-Ranks all participants in the unconscious_unaware condition by their contribution to the
-cross-phase NSS effect: Mooney fixations overlap MORE with where others looked during the
-SCRAMBLED than the INTACT disambiguation (i.e. NSS_scrambled > NSS_intact → NSS_diff < 0).
+"""Rank unconscious_unaware participants by their contribution to the cross-phase effect.
 
-Participants are sorted by mean NSS_diff (intact − scrambled) ascending: most-negative
-at the top drove the effect hardest; positive values worked against it.
+The effect is that Mooney fixations overlap MORE with where others looked during the
+SCRAMBLED than the INTACT disambiguation (NSS_scrambled > NSS_intact, so NSS_diff < 0).
+This asks whether that is spread across the group or carried by a few participants.
 
-Requires: analysesresults/NSS/NSS_crossphase_descriptives.pkl  (produced by NSS.py)
+Sorted by mean NSS_diff (intact - scrambled) ascending: most-negative at the top drove
+the effect hardest, positive values worked against it.
+
+Reads:  analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl   (NSS.py)
 """
 
 from pathlib import Path
@@ -16,19 +15,19 @@ import pickle
 import sys
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
-import nss_paths
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+from Scripts.Analysis.NSS import NSSPaths
+_P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
 CROSS_CACHE     = _P["CROSS_PKL"]
 TARGET_AWARENESS = "unconscious_unaware"
 
-# ── Load cross-phase results ───────────────────────────────────────────────────
+# --- Load cross-phase results
 with open(CROSS_CACHE, "rb") as f:
     cache = pickle.load(f)
 results = cache["data"] if isinstance(cache, dict) else cache
 
-# ── Flatten per-subject, per-image scores for the target awareness group ───────
+# --- Flatten per-subject, per-image scores for the target awareness group
 rows = []
 for entry in results["image"]:
     if entry.get("awareness") != TARGET_AWARENESS:
@@ -36,16 +35,16 @@ for entry in results["image"]:
     for subj in entry.get("subject", []):
         pid = subj.get("ParticipantID", "")
         rows.append({
-            "participant":   pid.split("_t")[0],  # strip trial suffix (e.g. "42_t3" → "42")
+            "participant":   pid.split("_t")[0],  # strip trial suffix (e.g. "42_t3" -> "42")
             "image":         entry["img"],
             "NSS_intact":    subj.get("NSS_intact"),
             "NSS_scrambled": subj.get("NSS_scrambled"),
-            "NSS_diff":      subj.get("NSS_diff"),  # intact − scrambled; negative drives the effect
+            "NSS_diff":      subj.get("NSS_diff"),  # intact - scrambled; negative drives the effect
         })
 
 df = pd.DataFrame(rows)
 
-# ── Aggregate per participant (mean across images/trials, ignoring NaN) ────────
+# --- Aggregate per participant (mean across images/trials, ignoring NaN)
 agg = (
     df.groupby("participant")
     .agg(
@@ -54,17 +53,17 @@ agg = (
         mean_scrambled= ("NSS_scrambled", "mean"),
         mean_diff     = ("NSS_diff",      "mean"),
     )
-    .sort_values("mean_diff", ascending=True)    # most-negative (effect driver) → top
+    .sort_values("mean_diff", ascending=True)    # most-negative (effect driver) -> top
     .reset_index()
 )
 agg.index += 1  # 1-based rank
 
-# ── Print ranked table ─────────────────────────────────────────────────────────
+# --- Print ranked table
 n_participants = len(agg)
 group_mean_diff = df["NSS_diff"].mean()
 
 print(f"\nCross-phase NSS ranking - {TARGET_AWARENESS}  (N={n_participants} participants)")
-print(f"Effect: NSS_scrambled > NSS_intact  →  negative NSS_diff drives the effect")
+print(f"Effect: NSS_scrambled > NSS_intact  ->  negative NSS_diff drives the effect")
 print(f"Group mean NSS_diff = {group_mean_diff:.4f}\n")
 
 header = f"{'Rank':>4}  {'Participant':<14}  {'n_obs':>5}  {'NSS_intact':>10}  {'NSS_scrambled':>13}  {'NSS_diff':>9}"

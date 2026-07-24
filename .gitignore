@@ -1,43 +1,27 @@
-# Python-generated files
+# Only code is tracked. Everything the pipeline reads or writes stays local.
+
+# Pipeline input and output.
+# The * suffixes also catch the one-off variant folders (*OLD, *BackUp, RIGHTINTERPOL*).
+data/
+*analysesresults*/
+DataQualityChecks*/
+Figures*/
+Archive/
+
+# Python
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
+.venv
 
-# Scratch / temp working files (never commit these)
+# Scratch / temp working files
 scratchpad_*
 *.npz
 
-# Virtual environments
-.venv
-
-data/
-
-DataQualityChecks/
-
-analysesresults/
-
-
-Figures/
-/newnssscriptsresults
-/Figures
-/analysesresultsOLDPDD
-/Archive
-/analysesresultsNEWPDD
-/analysesresultsNEWPDDMOONEYSINGLE
-/Figures
-
+# Editor / OS / assistant
+.DS_Store
 .claude/
 CLAUDE.md
-.DS_Store
-Scripts/.DS_Store
-Scripts/Analysis/.DS_Store
-/DataQualityChecksWhole
-/analysesresultsWHOLE/NSS
-/FiguresWhole
-/analysesresultsBackUp
-/analysesresultsOLD
-/FiguresWholeOLD
-/RIGHTEYE

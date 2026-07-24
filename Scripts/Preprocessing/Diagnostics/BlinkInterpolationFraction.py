@@ -1,10 +1,8 @@
-# BlinkInterpolationFraction.py
-"""
-Diagnostic 3/3 for the blink-INTERPOLATION preprocessing option.
+"""What does the margin cost us?  (blink-interpolation diagnostic 3 of 3)
 
-Question it answers: "how much of the analyzed gaze would be reconstructed (not measured)
-if we interpolate?" i.e. the cost of the peri-blink margin, in the phases we actually
-analyze. Confirms the margin is affordable, especially in the Mooney phase (the DV).
+How much of the analyzed gaze would be reconstructed rather than measured if we
+interpolate? Confirms the margin is affordable in the phases that actually matter,
+above all the Mooney phase, which carries the DV.
 
 For each raw .asc it reconstructs the analyzed phase windows (disambiguation and Mooney,
 from the MSG markers via parse_trials_from_asc) and the blinks (EBLINK). For candidate
@@ -13,9 +11,11 @@ be PCHIP-filled), split by phase. Only blinks up to Settings.MAX_BLINK_INTERP_MS
 (longer = track loss, left as gaps). Overlapping fill windows are merged so nothing is
 double counted.
 
-Outputs (under DataQualityChecks/blink_interpolation/):
+Reads the raw .asc files directly, so it needs no pipeline run. From the project root:
+    python3 Scripts/Preprocessing/Diagnostics/BlinkInterpolationFraction.py
+
+Writes (under DataQualityChecks/blink_interpolation/):
     blink_interpolation_fraction.csv   - analyzed minutes + reconstructed % per phase per margin
-Run from the project root:  python3 Scripts/Preprocessing/Diagnostics/BlinkInterpolationFraction.py
 """
 
 import sys

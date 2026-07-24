@@ -1,17 +1,18 @@
-# NSS_CrossPhase_ViolinByAwareness.py
+"""Cross-phase NSS split-violin plot by awareness state. The main results figure.
 
-"""
-Cross-Phase NSS Split-Violin Plot by Awareness State
-======================================================
-Reads the participant-trial-level long format produced by the awareness-aware
-cross-phase NSS export (NSS_CrossPhase_LongFormat.csv, columns: Participant,
-Image, Session, Awareness, Trial, Experiment_Half, ReferenceMap, NSS).
-
-Plot:
     X-axis groups : Conscious Aware (PAS 2-3) | Unconscious Aware (PAS 2-3) | Unconscious Unaware (PAS 0)
     Split violin  : left half = Intact disambiguator reference, right half = Scrambled
     Overlaid dots : per-participant mean NSS, dodge-aligned with jitter off so
                     they form a single vertical line within each half-violin.
+
+A whole-window figure with no Early/Late dimension, so it always reads the whole-mode
+results (the halves comparison has its own plot, CrossNSSHalvesLinePlot.py). It does
+prompt for the trial set and blink mode, and suffixes the output PNG to match. The
+model EMM diamonds come from the all-trials lmer, so they are drawn in all-trials mode
+only.
+
+Reads:  analysesresults/NSS_whole[_suffix]/NSS_CrossPhase_LongFormat.csv   (NSS.py)
+Writes: Figures/nss_analyses/NSS_CrossPhase_Violin_byAwareness*.png
 """
 
 import pandas as pd
@@ -29,17 +30,17 @@ UNCONSCIOUS_ONLY = True
 # Trial set: [a]ll / [e]xperiment-block only / e[x]tra-block only (prompt, or $TRIAL_SET env var).
 # Picks which whole-mode results folder is read (NSS_whole / NSS_whole_exponly / NSS_whole_extraonly).
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root, for nss_paths
-import nss_paths
-TRIAL_SET = nss_paths.ask_trial_set()
-BLINK_MODE = nss_paths.ask_blink_mode()  # filter (original) / interp (PCHIP) — picks the *_interp folder
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+from Scripts.Analysis.NSS import NSSPaths
+TRIAL_SET = NSSPaths.ask_trial_set()
+BLINK_MODE = NSSPaths.ask_blink_mode()  # filter (original) / interp (PCHIP); picks the *_interp folder
 
-# Whole-window plot (awareness x Intact/Scrambled) — it has no Early/Late dimension,
+# Whole-window plot (awareness x Intact/Scrambled). It has no Early/Late dimension,
 # so it always reads the whole-mode cross-phase results. The halves comparison has its
 # own plot (CrossNSSHalvesLinePlot.py).
-INPUT_FILE  = nss_paths.paths_for("whole", TRIAL_SET, BLINK_MODE)["CROSS_CSV"]
+INPUT_FILE  = NSSPaths.paths_for("whole", TRIAL_SET, BLINK_MODE)["CROSS_CSV"]
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-_SUFFIX = nss_paths.TRIAL_SET_SUFFIX[TRIAL_SET] + nss_paths.BLINK_SUFFIX[BLINK_MODE]
+_SUFFIX = NSSPaths.TRIAL_SET_SUFFIX[TRIAL_SET] + NSSPaths.BLINK_SUFFIX[BLINK_MODE]
 OUTPUT_PLOT = OUTPUT_DIR / (
     f"NSS_CrossPhase_Violin_byAwareness_unconsciousOnly{_SUFFIX}.png"
     if UNCONSCIOUS_ONLY else
@@ -64,7 +65,7 @@ if UNCONSCIOUS_ONLY:
 
 
 # Model EMMs pasted in by hand from the fitted lmer. Drawn whenever DRAW_EMMS is True,
-# regardless of TRIAL_SET / BLINK_MODE — YOU are responsible for pasting the EMMs that
+# regardless of TRIAL_SET / BLINK_MODE, so YOU are responsible for pasting EMMs that
 # match the model you actually ran. Set DRAW_EMMS = False to hide the diamonds.
 DRAW_EMMS = True
 
@@ -188,7 +189,7 @@ def main():
     plt.tight_layout()
     plt.savefig(OUTPUT_PLOT, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved → {OUTPUT_PLOT}")
+    print(f"Saved -> {OUTPUT_PLOT}")
 
 
 if __name__ == "__main__":

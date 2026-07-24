@@ -5,12 +5,16 @@ Single panel. For each awareness state, two points side by side: First half
 coloured separately: Intact (blue) vs Scrambled (green); second-half dots use a
 darker shade. Error bars are the 95% CIs from the linear mixed model.
 
-EMMs are pasted in below from the fitted lmer model:
+No data file is read: the EMMs are pasted in below by hand from the fitted lmer model
+
     NSS ~ Awareness * ReferenceMap * Experiment_Half
           + (1 + ReferenceMap | Participant) + (1 + ReferenceMap | Image)
-(Satterthwaite df, Wald CIs).
 
-Output: Figures/nss_separated_analyses/CrossNSSHalvesLinePlot.png
+(Satterthwaite df, Wald CIs). Refit the model and repaste them if the data changes.
+Note the export now calls that between-trial split `Experiment_Third` and gives it
+three levels; the EMMs below are from the earlier two-level median split.
+
+Writes: Figures/nss_separated_analyses/CrossNSSHalvesLinePlot.png
 """
 
 from pathlib import Path
@@ -26,8 +30,8 @@ def darken(color, factor=0.55):
     return (r * factor, g * factor, b * factor)
 
 # === CONFIG ===
-ROOT = Path(__file__).resolve().parents[3]
-OUT = ROOT / "Figures" / "nss_separated_analyses" / "CrossNSSHalvesLinePlot.png"
+# Relative to the project root, like every other plot script (run them from there).
+OUT = Path("Figures/nss_separated_analyses/CrossNSSHalvesLinePlot.png")
 
 AWARENESS_ORDER = ["conscious_aware", "unconscious_aware", "unconscious_unaware"]
 HALVES = ["First_Half", "Second_Half"]

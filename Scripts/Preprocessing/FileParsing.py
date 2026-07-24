@@ -1,4 +1,9 @@
-# FileParsing.py 
+"""Readers for the parts of an EyeLink .asc file pymovements does not expose.
+
+Blinks (EBLINK lines) and trial/phase windows (MSG marker codes) both have to be
+recovered from the raw text, so every step that needs them comes through here: blink
+filtering, blink interpolation, phase assignment and the diagnostics.
+"""
 
 import polars as pl
 from bisect import bisect_left

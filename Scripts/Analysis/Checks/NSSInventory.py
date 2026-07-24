@@ -1,5 +1,16 @@
-# NSS_Debug.py
-# Run this standalone to diagnose dropped images, cell sizes, and data integrity.
+"""Inventory of everything NSS.py cached: dropped images, cell sizes, data integrity.
+
+The first place to look when a result seems off. Loads all three pickles and prints,
+in order: the fixmap inventory by type and session; which images the within-phase step
+dropped and why; the subject-count distributions behind those drops; cross-phase cell
+sizes per awareness state; images left with 0 subjects; and how well the typicality
+covariate joins onto the cross-phase rows.
+
+Reads:  analysesresults/NSS[_suffix]/FixMaps_full.pkl                (NSS.py)
+        analysesresults/NSS[_suffix]/NSS_WithinPhase.pkl             (NSS.py)
+        analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl   (NSS.py)
+        data/NSS_all_fixations_clean.parquet                         (NSSExporter.py)
+"""
 
 from pathlib import Path
 import pickle
@@ -7,18 +18,16 @@ import sys
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
-import nss_paths
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+from Scripts.Analysis.NSS import NSSPaths
+_P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
-NSS_DIR   = _P["SHARED_DIR"]   # FixMaps + within-phase (mode-independent)
-FIX_FILE  = Path("data/NSS_all_fixations_clean.parquet")
+from Settings import FIX_FILE, MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS
 
-MIN_SUBJ_PER_IMAGE_NSS   = 2
-MIN_SUBJ_PER_IMAGE_CROSS = 2
+NSS_DIR = _P["SHARED_DIR"]   # FixMaps + within-phase (mode-independent)
 
-# ── Load ──────────────────────────────────────────────────────────────────────
-fixations   = nss_paths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
+# --- Load
+fixations   = NSSPaths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
 FixMaps     = pickle.load(open(NSS_DIR / "FixMaps_full.pkl",              "rb"))["data"]
 NSSResults  = pickle.load(open(NSS_DIR / "NSS_WithinPhase.pkl",           "rb"))["data"]
 CrossResults= pickle.load(open(_P["CROSS_PKL"],                           "rb"))["data"]
@@ -31,7 +40,7 @@ fm_types = Counter((fm["image_type"], fm["condition"]) for fm in FixMaps)
 for k, v in sorted(fm_types.items()):
     print(f"  {k[0]:45s}  session={k[1]}  n_images={v}")
 
-# ── Within-phase: dropped breakdown ───────────────────────────────────────────
+# --- Within-phase: dropped breakdown
 print("\n" + "=" * 60)
 print("2. WITHIN-PHASE: DROPPED IMAGES BREAKDOWN")
 print("=" * 60)
@@ -53,7 +62,7 @@ else:
               .rename(columns={"count": "n_dropped", "mean": "avg_subj", "max": "max_subj"})
               .to_string())
 
-# ── Within-phase: subject count distribution ──────────────────────────────────
+# --- Within-phase: subject count distribution
 print("\n" + "=" * 60)
 print("3. WITHIN-PHASE: SUBJECT COUNT DISTRIBUTION PER IMAGE TYPE")
 print("=" * 60)
@@ -65,9 +74,9 @@ print(df_fm.groupby(["image_type", "condition"])["n_subjects"]
           .describe(percentiles=[.25, .5, .75])
           .round(1).to_string())
 
-# ── Cross-phase: per-awareness cell sizes ─────────────────────────────────────
+# --- Cross-phase: per-awareness cell sizes
 print("\n" + "=" * 60)
-print("4. CROSS-PHASE: SUBJECTS PER (IMAGE × SESSION × AWARENESS)")
+print("4. CROSS-PHASE: SUBJECTS PER (IMAGE x SESSION x AWARENESS)")
 print("=" * 60)
 cross_rows = []
 for rec in CrossResults["image"]:
@@ -87,7 +96,7 @@ print(df_cross.groupby(["awareness", "condition"]).agg(
     n_valid_scram =("valid_scrambled","sum"),
 ).round(1).to_string())
 
-# ── Cross-phase: images with 0 subjects ───────────────────────────────────────
+# --- Cross-phase: images with 0 subjects
 print("\n" + "=" * 60)
 print("5. CROSS-PHASE: IMAGES WITH 0 SUBJECTS (fully dropped)")
 print("=" * 60)
@@ -97,7 +106,7 @@ if zero.empty:
 else:
     print(zero.groupby(["awareness","condition"]).size().to_string())
 
-# ── Eccentricity lookup coverage ──────────────────────────────────────────────
+# --- Eccentricity lookup coverage
 print("\n" + "=" * 60)
 print("6. ECCENTRICITY LOOKUP COVERAGE")
 print("=" * 60)
@@ -121,11 +130,11 @@ for rec in CrossResults["image"]:
         else:
             n_missing += 1
 print(f"  Cross-phase rows matched to eccentricity score: {n_matched}")
-print(f"  Cross-phase rows WITHOUT eccentricity score:    {n_missing}  ← will be NaN in NSS_Corrected")
+print(f"  Cross-phase rows WITHOUT eccentricity score:    {n_missing}  <- will be NaN in NSS_Corrected")
 
-# ── Fixation counts by awareness ──────────────────────────────────────────────
+# --- Fixation counts by awareness
 print("\n" + "=" * 60)
-print("7. RAW FIXATION COUNTS BY IMAGE_TYPE × SESSION × AWARENESS")
+print("7. RAW FIXATION COUNTS BY IMAGE_TYPE x SESSION x AWARENESS")
 print("=" * 60)
 print(fixations.groupby(["image_type","session","awareness"])
       .size().reset_index(name="n_fixations").to_string(index=False))

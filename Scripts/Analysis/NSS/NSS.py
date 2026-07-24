@@ -1,8 +1,31 @@
-"""
-NSS (Normalized Scanpath Saliency) Analysis Module for Eye-Gaze Data
+"""Normalized Scanpath Saliency (NSS) analysis. The core of Stage 2.
+
+Builds per-image fixation (saliency) maps, then scores fixations against them twice:
+
+  Within-phase  Each participant's fixations scored against the map built from
+                everyone else's (leave-one-subject-out), per phase. Serves as a
+                "gaze typicality" measure and as the covariate for the model.
+
+  Cross-phase   The key DV. Mooney-phase fixations scored against the *disambiguation*
+                phase reference maps, once against intact and once against scrambled.
+                NSS_diff = intact - scrambled.
+
+Both are pickle-cached and keyed by a meta dict, so changing PPD, image size, subject
+thresholds, grouping, nan_policy, mooney_split, trial_set or blink_mode must come with
+a bumped `tag=` string or the cache will silently return the old result.
+
+Several details deliberately mirror MATLAB so results stay comparable with the original
+implementation: round-half-away-from-zero, 1-based pixel indexing, imgaussfilt-equivalent
+blurring, and population (not sample) SD for z-normalisation.
+
+Reads:  data/NSS_all_fixations_clean.parquet     (NSSExporter.py)
+Writes: analysesresults/NSS[_suffix]/FixMaps_full.pkl, NSS_WithinPhase.pkl + .csv
+        analysesresults/NSS_<mode>[_suffix]/NSS_crossphase_descriptives.pkl + .csv
+        (paths resolved at runtime by NSSPaths.select())
 """
 
 #%%
+import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -11,30 +34,21 @@ import pickle
 from typing import Any
 import zlib
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+
 #%% === CONFIG ===
-FIX_FILE            = Path("data/NSS_all_fixations_clean.parquet")
-# Output paths and the Mooney-split choice are resolved at runtime via
-# nss_paths.select() in __main__ (prompt or $MOONEY_SPLIT).
-IMAGE_HEIGHT        = 600
-IMAGE_WIDTH         = 800
-DEBUG               = True
-
-MASK_PPD            = 48.55 
-SIGMA               = MASK_PPD / 2.0 # blurring radius 
-
-MIN_SUBJ_PER_IMAGE_NSS   = 2   # within-phase NSS: minimum subjects required per image
-MIN_SUBJ_PER_IMAGE_CROSS = 2   # cross-phase NSS: minimum Mooney subjects required per image
-MIN_IMAGES_PER_CELL_CROSS = 0 # cross-phase NSS: drop a participant's awareness×reference cell if it has fewer valid scores
-
-NAN_POLICY_CROSS         = "permissive"  # or "matlab_strict"
-
-# Cross-phase Mooney window treatment (chosen at runtime by nss_paths.select()):
-#   "whole"  -> score the full 3 s Mooney presentation as one unit (original behaviour)
-#   "halves" -> score each 1.5 s temporal half (Early/Late, from the parquet's
-#               Mooney_Half column) separately against the same whole disamb refs
-# Each mode writes to its own analysesresults/NSS_<mode>/ folder so runs never overwrite.
-
-DISPERSION_DDOF = 0   # 0 = population sd (spread of present data); set to 1 for sample sd
+# All tunable values live in Settings.py so there is one file to edit. Only the
+# per-run choices are resolved here: NSSPaths.select() (in __main__) prompts for the
+# Mooney split, trial set and blink mode, and derives the output folders from them.
+#   Mooney split "whole"  -> score the full 3 s Mooney presentation as one unit
+#                "halves" -> score each 1.5 s half (Early/Late, from the parquet's
+#                            Mooney_Half column) against the same whole disamb refs
+from Settings import (
+    FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD, SIGMA,
+    MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS,
+    NAN_POLICY_CROSS, DISPERSION_DDOF,
+    NSS_DEBUG as DEBUG,
+)
 
 #%% === LOAD & PREP ===
 
@@ -72,7 +86,7 @@ def _meta_block(ppd: float, image_h: int, image_w: int, group_cols: tuple[str, .
 
 #%% === FIXATION MAPS ===
 def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
-    """Per-subject hit map → average across subjects → Gaussian blur"""
+    """Per-subject hit map -> average across subjects -> Gaussian blur"""
     needed = {"ImageName", "session", "image_type", "participant", "x_deg_centered", "y_deg"}
     missing = needed - set(df.columns)
     if missing:
@@ -142,7 +156,7 @@ def CreateFixationMaps_from_df(df: pd.DataFrame, pixels_per_vdegree: float):
 #%% === NSS Helpers ===
 def _disk_offsets(radius_px: float) -> tuple[np.ndarray, np.ndarray]:
     """Creates circle mask to later identify which fix fall within radius"""
-    r = int(np.ceil(float(radius_px)))   # ← ceil instead of floor
+    r = int(np.ceil(float(radius_px)))   # <- ceil instead of floor
     y, x = np.mgrid[-r:r+1, -r:r+1]
     m = (x*x + y*y) <= (float(radius_px) ** 2)  # still exact inclusion test
     return y[m].astype(np.int32), x[m].astype(np.int32)
@@ -346,7 +360,7 @@ def calculate_WithinPhase_NSS(FixMaps,fixations_df: pd.DataFrame,pixels_per_vdeg
             coords_units, unit_keys = _coords_in_fixmaps_order(
                 df_group, pixels_per_vdegree, H, W, return_keys=True)
 
-            # subjects (and blurred[j]) are per participant, in FixMaps order — map each
+            # subjects (and blurred[j]) are per participant, in FixMaps order, so map each
             # participant to its subject-map index so every viewing can be scored against
             # that participant's LOSO map (whole participant left out, both viewings).
             subj_pids = [str(s.get("ParticipantID")) for s in subjects]
@@ -424,14 +438,14 @@ def calculate_NSS_crossphase(
     nan_policy: str = "permissive", min_subj_per_image_cross: int = 2,
     mooney_split: str = "whole"):
     """
-    For each Mooney image × condition, compute NSS of Mooney fixations
+    For each Mooney image x condition, compute NSS of Mooney fixations
     against two reference saliency maps from the disambiguation phase:
       - disamb_intact
       - disamb_not_intact (scrambled)
 
     mooney_split controls how the 3 s Mooney window is scored:
-      "whole"  -> one scoring unit per participant×trial (original behaviour).
-      "halves" -> two units per participant×trial, the Early / Late 1.5 s halves
+      "whole"  -> one scoring unit per participantxtrial (original behaviour).
+      "halves" -> two units per participantxtrial, the Early / Late 1.5 s halves
                   (from the Mooney_Half column). The disamb reference maps are
                   built once and are identical across halves.
     """
@@ -476,7 +490,7 @@ def calculate_NSS_crossphase(
         if not str(awareness_val).startswith(expected_prefix): #check for mismatch between condition and awareness
             print(f"[cross] MISMATCH: cond={cond}, awareness={awareness_val} (expected prefix '{expected_prefix}')")
 
-        # Reference maps depend only on (image, session) — not on the Mooney fixations —
+        # Reference maps depend only on (image, session), not on the Mooney fixations,
         # so retrieve + z-normalize them once and reuse across the temporal half(s) below.
         fm_intact = fm_index.get((img, cond, "disamb_intact"))
         fm_scrambled = fm_index.get((img, cond, "disamb_not_intact"))
@@ -505,7 +519,7 @@ def calculate_NSS_crossphase(
             df_group = df_group_all if half is None else df_group_all[df_group_all["Mooney_Half"] == half]
 
             # Take the (participant, trial) keys straight from _coords_in_fixmaps_order
-            # so each label is paired with its own coords unit by construction — no
+            # so each label is paired with its own coords unit by construction, with no
             # parallel sort to keep in lockstep (which would silently mis-pair repeat
             # trials if trial_number ever stopped sorting lexically).
             coords_list, unit_keys = _coords_in_fixmaps_order(
@@ -551,7 +565,7 @@ def calculate_NSS_crossphase(
 
                 # Cosmetic display index only (ParticipantID is the real key). The
                 # FixMaps subject list is per-participant, but j indexes per (participant,
-                # trial) units, so don't look subjNum up there — just number the units.
+                # trial) units, so don't look subjNum up there; just number the units.
                 subj_out.append({
                     "subjNum": j + 1,
                     "ParticipantID": participant_ids[j],
@@ -601,7 +615,7 @@ def calculate_NSS_crossphase(
     n_total = len(Results["image"])
     n_valid_i = sum(np.isfinite(r["NSS_intact_img"]) for r in Results["image"])
     n_valid_s = sum(np.isfinite(r["NSS_scrambled_img"]) for r in Results["image"])
-    print(f"[cross] DONE: {n_total} (img,cond,awareness) groups → valid intact={n_valid_i}, valid scrambled={n_valid_s}")
+    print(f"[cross] done: {n_total} (img,cond,awareness) groups -> valid intact={n_valid_i}, valid scrambled={n_valid_s}")
 
     if DEBUG:
         from collections import Counter
@@ -618,16 +632,14 @@ if __name__ == "__main__":
     # Pick the Mooney-window mode (prompt or $MOONEY_SPLIT) and resolve output paths.
     # FixMaps + within-phase are shared across modes; cross-phase outputs go to
     # analysesresults/NSS_<mode>/ so whole and halves runs never overwrite each other.
-    import sys as _sys
-    _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
-    import nss_paths
-    _P = nss_paths.select()
+    from Scripts.Analysis.NSS import NSSPaths
+    _P = NSSPaths.select()
     MOONEY_SPLIT = _P["MOONEY_SPLIT"]
     TRIAL_SET = _P["TRIAL_SET"]
     OUTPUT_DIR = _P["OUTPUT_DIR"]
     _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
 
-    # Blink mode ("filter"/"interp") comes from nss_paths.select() (prompt or $BLINK_MODE);
+    # Blink mode ("filter"/"interp") comes from NSSPaths.select() (prompt or $BLINK_MODE);
     # it already selected the matching *_interp output folder. We also stamp it into every
     # cache meta below so switching blink mode forces a recompute instead of silently
     # returning the other mode's cached pickle. Must match how Stage 1 built the parquet.
@@ -636,8 +648,8 @@ if __name__ == "__main__":
     # ---- Build fixmaps ----
     # A single-block trial set (trial_set="experiment" or "extra") drops the other
     # block up front, so fixmaps, within-phase and cross-phase all use that one
-    # block's fixations only (outputs go to the suffixed folders resolved by nss_paths).
-    fixations = nss_paths.filter_trial_set(load_fixations(), TRIAL_SET)
+    # block's fixations only (outputs go to the suffixed folders resolved by NSSPaths).
+    fixations = NSSPaths.filter_trial_set(load_fixations(), TRIAL_SET)
     ppd = MASK_PPD
     cache_path = _P["FIXMAPS_PKL"]  # shared
     meta = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition","image_type"), tag="CreateFixationMaps_from_df:v3_awareness_split",
@@ -649,11 +661,11 @@ if __name__ == "__main__":
             cache = pickle.load(f)
         if cache.get("meta") == meta:
             FixMaps = cache["data"]
-            print(f"Loaded FixMaps from cache → {cache_path}")
+            print(f"Loaded FixMaps from cache -> {cache_path}")
         else:
             raise ValueError("cache params changed")
     except Exception:
-        print("Building fixation maps…")
+        print("Building fixation maps...")
 
         # Split fixations into disambiguation and mooney groups, then create fixation maps for each
         df_disamb = fixations[fixations["image_type"].isin(["disamb_intact", "disamb_not_intact"])]
@@ -664,7 +676,7 @@ if __name__ == "__main__":
 
         with open(cache_path, "wb") as f:
             pickle.dump({"meta": meta, "data": FixMaps}, f)
-        print(f"Saved FixMaps → {cache_path}")
+        print(f"Saved FixMaps -> {cache_path}")
     print(f"Ready: {len(FixMaps)} images in FixMaps.")
 
     # --- Within Phase NSS calculation ---
@@ -687,13 +699,13 @@ if __name__ == "__main__":
         if isinstance(nss_cache, dict) and "meta" in nss_cache and "data" in nss_cache:
             if nss_cache["meta"] == nss_meta:
                 NSSResults = nss_cache["data"]
-                print(f"Loaded NSSResults from cache → {nss_cache_path}")
+                print(f"Loaded NSSResults from cache -> {nss_cache_path}")
             else:
                 # if parts of meta mismatch, print diffs for debugging
                 diffs = {k: (nss_cache['meta'].get(k), nss_meta.get(k))
                         for k in sorted(set(nss_cache['meta']) | set(nss_meta))
                         if nss_cache['meta'].get(k) != nss_meta.get(k)}
-                print("[NSS cache] meta mismatch → recomputing. Diffs:", diffs)
+                print("[NSS cache] meta mismatch -> recomputing. Diffs:", diffs)
                 raise ValueError("meta mismatch")
 
     except Exception: # compute NSS if any issue with cache loading or meta mismatch
@@ -705,7 +717,7 @@ if __name__ == "__main__":
         # Write new NSS cache
         with open(nss_cache_path, "wb") as f:
             pickle.dump({"meta": nss_meta, "data": NSSResults}, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print(f"Saved NSSResults → {nss_cache_path}")
+        print(f"Saved NSSResults -> {nss_cache_path}")
 
     # sanity check and quick report of NSS results
     kept = [m for m in NSSResults["meanNSSSimilarityPerImage"] if np.isfinite(m)] # filter out dropped images (NaN) for reporting
@@ -718,7 +730,7 @@ if __name__ == "__main__":
     # cache setup for cross-phase
     cross_cache_path = _P["CROSS_PKL"]  # per-mode
     cross_meta  = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition"),
-                          tag="calculate_NSS_crossphase:v3_mooney_split",  # ← Changed version tag
+                          tag="calculate_NSS_crossphase:v3_mooney_split",  # <- Changed version tag
                           extra={"nan_policy": str(NAN_POLICY_CROSS),
                                  "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS),
                                  "mooney_split": str(MOONEY_SPLIT),
@@ -732,7 +744,7 @@ if __name__ == "__main__":
             cross_cache = pickle.load(f)
         if isinstance(cross_cache, dict) and cross_cache.get("meta") == cross_meta:
             CrossResults = cross_cache["data"]
-            print(f"Loaded Cross-phase NSS from cache → {cross_cache_path}")
+            print(f"Loaded Cross-phase NSS from cache -> {cross_cache_path}")
         else:
             raise ValueError("cross-phase cache meta mismatch")
     except Exception:
@@ -747,7 +759,7 @@ if __name__ == "__main__":
         # save results + cache
         with open(cross_cache_path, "wb") as f:
             pickle.dump({"meta": cross_meta, "data": CrossResults}, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print(f"Saved Cross-phase NSS → {cross_cache_path}")
+        print(f"Saved Cross-phase NSS -> {cross_cache_path}")
 
     # Diagnostics 
     intact_vals    = np.asarray(CrossResults["meanNSS_intact_per_image"], dtype=float)
@@ -769,7 +781,7 @@ if __name__ == "__main__":
     # ==========================================
     # CSV EXPORT WITHIN PHASE NSS
     # ==========================================
-    print("\n   Creating Within-Phase Dataset for Jamovi...")
+    print("\nCreating within-phase dataset for Jamovi...")
     
     # Flatten the NSSResults
     w_flat = []
@@ -798,7 +810,7 @@ if __name__ == "__main__":
     # ==========================================
     # CSV EXPORT CROSS PHASE NSS
     # ==========================================
-    print("\n   Creating Participant-Level Dataset for Jamovi...")
+    print("\nCreating participant-level dataset for Jamovi...")
 
     # Typicality = the participant's within-phase disamb_intact score for this viewing.
     # Keyed per (participant, image, session, trial) so each Mooney viewing is paired
@@ -838,7 +850,7 @@ if __name__ == "__main__":
     missing = df_long['Within-NSS-Typicality'].isna().sum()
     print(f"\n[Eccentricity Check] Matched: {matched} | Missing (NaN): {missing}")
 
-    # label experiment-thirds for later analysis: three ordered levels — the
+    # label experiment-thirds for later analysis: three ordered levels, where the
     # Experiment block split at each participant's median trial (Exp_First /
     # Exp_Second) plus the whole Extra block as the third level.
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
@@ -876,9 +888,9 @@ if __name__ == "__main__":
     # Clean the names
     df_long_fully_melted['ReferenceMap'] = df_long_fully_melted['ReferenceMap'].str.replace('NSS_', '')
 
-    # Drop thin participant×awareness×reference cells (e.g. a UU participant with only
+    # Drop thin participantxawarenessxreference cells (e.g. a UU participant with only
     # 2 valid Intact scores loses their Intact rows, not their Scrambled rows).
-    # transform('count') counts non-NaN NSS per cell — matches Jamovi's descriptive N.
+    # transform('count') counts non-NaN NSS per cell, matching Jamovi's descriptive N.
     _cell = ['Participant', 'Awareness', 'ReferenceMap']
     _n_valid = df_long_fully_melted.groupby(_cell)['NSS'].transform('count')
     _before = len(df_long_fully_melted)

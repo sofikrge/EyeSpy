@@ -1,8 +1,7 @@
-"""
-LeftBiasPerParticipant.py
--------------------------
-Is the left-side fixation bias (seen in scrambled images + unaware Mooneys)
-consistent across participants, or driven by a few?
+"""Is the left-side fixation bias consistent across participants, or driven by a few?
+
+The bias shows up pooled, in scrambled images and unaware Mooneys. This splits it
+per participant to see whether it is real or an artefact of a few extreme people.
 
 Computes the SAME "Left %" diagnostic as FixationDensityPlot.py, but PER
 PARTICIPANT instead of pooled across everyone. The grid mirrors
@@ -24,30 +23,28 @@ Reading the result:
   - If most cluster around 50% and a few extreme participants pull the pooled
     mean up -> the effect is driven by those few (check n per participant too).
 
-Run from the project root:
-    python3 Scripts/Analysis/NSSControlAnalyses/LeftBiasPerParticipant.py
-
-Requires: data/NSS_all_fixations_clean.parquet  (produced by NSSExporter.py)
+Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
+Writes: Figures/nss_separated_analyses/LeftBiasPerParticipant.png
 """
 
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
+
 # =============================================================================
 # CONFIG
 # =============================================================================
 
-FIX_FILE    = Path("data/NSS_all_fixations_clean.parquet")
+# Same geometry as NSS.py and FixationDensityPlot.py, from the one config file.
+from Settings import (FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD,
+                      MIN_FIX_PER_PARTICIPANT)
+
 OUTPUT_DIR  = Path("Figures/nss_separated_analyses")
 OUTPUT_FILE = OUTPUT_DIR / "LeftBiasPerParticipant.png"
-
-IMAGE_HEIGHT = 600    # eye-tracking canvas height in pixels - must match NSS.py
-IMAGE_WIDTH  = 800    # eye-tracking canvas width  in pixels - must match NSS.py
-MASK_PPD     = 48.55  # pixels per visual degree - must match NSS.py
-
-MIN_FIX_PER_PARTICIPANT = 20   # ignore participants with too little data in a cell
 
 # =============================================================================
 # GRID DEFINITION - identical to FixationDensityPlot.py
@@ -174,7 +171,7 @@ def main():
                 ax.axhline(tbl["left_pct"].mean(), color="blue", linewidth=1,
                            label=f"mean {tbl['left_pct'].mean():.1f}%")
                 ax.text(0.5, 0.02,
-                        f"{n_biased}/{n_part} left-biased  ·  pooled {pooled:.1f}%",
+                        f"{n_biased}/{n_part} left-biased  |  pooled {pooled:.1f}%",
                         transform=ax.transAxes, ha="center", va="bottom", fontsize=8,
                         bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
                                   alpha=0.7, linewidth=0))

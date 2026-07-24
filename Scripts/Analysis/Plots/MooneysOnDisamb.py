@@ -1,7 +1,6 @@
-"""
-Mooney-on-Disambiguator Visualization
---------------------------------------
-A more *direct* way of looking at the cross-phase NSS than NSSSVisualiser.py.
+"""Mooney fixations overlaid on the disambiguator reference maps they were scored against.
+
+A more *direct* way of looking at the cross-phase NSS than three separate heatmaps.
 
 The cross-phase NSS score is literally: "how well do the Mooney-phase fixations land on
 the disambiguation-phase saliency map?" - scored once against the INTACT reference map and
@@ -12,12 +11,21 @@ overlap, this script overlays the actual Mooney fixation LOCATIONS on top of the
 scrambled reference maps side by side. If the Mooney fixations sit on the hot regions of the
 scrambled map more than the intact map, you can SEE why NSS_scrambled > NSS_intact.
 
-Per image (3x1 grid), focused on the unconscious_unaware condition:
-    [ Mooney + its fixations ] [ Intact ref map + Mooney fixations ] [ Scrambled ref map + Mooney fixations ]
+One 3x3 figure per image, for the N_TOP images with the most negative UU NSS_diff:
+    Rows    - Conscious Aware / Unconscious Aware / Unconscious Unaware
+    Columns - Mooney + its fixations | Intact ref map | Scrambled ref map
+              (lime dots are the Mooney fixations on all three columns)
 
-Run AFTER NSS.py has produced the cached pickles.
+MOONEY_DIRS / DISAMB_DIRS below are absolute paths to the stimulus images and must be
+edited to run on another machine.
+
+Reads:  analysesresults/NSS_whole/NSS_crossphase_descriptives.pkl   (NSS.py)
+        analysesresults/NSS/FixMaps_full.pkl                        (NSS.py)
+        data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
+Writes: Figures/nss_separated_analyses/MooneysOnDisamb/Rank_<nn>_<image>.png
 """
 
+import sys
 import pickle
 import numpy as np
 import pandas as pd
@@ -26,25 +34,21 @@ import matplotlib.image as mpimg
 from pathlib import Path
 from scipy.fft import fft2, ifft2
 
-# ============================================================================
-# CONFIGURATION - Settings you might need to change
-# ============================================================================
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
 
-# 1. Where to find the data and save the plots
-# Whole-window visualization (ranks images by NSS_diff, overlays Mooney fixations) —
-# no Early/Late dimension, so it always reads the whole-mode cross-phase results.
-STATS_PATH = Path("analysesresults/NSS_whole") / "NSS_crossphase_descriptives.pkl"  # Cross-phase scores (ranking + DV)
-MAPS_PATH = Path("analysesresults/NSS") / "FixMaps_full.pkl"                         # Pre-blurred reference saliency maps (shared)
-FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")     # Raw fixations (for the overlay points)
-OUTPUT_DIR = Path("Figures/nss_separated_analyses/MooneysOnDisamb")  # Where images will be saved
+# === CONFIG ===
 
-# 2. Screen and Eye-Tracking properties (kept consistent with NSS.py / Settings.py by hand)
-MASK_PPD = 48.55          # Pixels Per Degree
-IMAGE_HEIGHT = 600        # Eye-tracking capture height
-IMAGE_WIDTH = 800         # Eye-tracking capture width
-IMAGE_SIZE_DEG = (9.99, 7.50)  # On-screen stimulus size (width, height) in degrees
+# 1. Geometry, shared with NSS.py so the overlay lines up with the reference maps.
+from Settings import FIX_FILE, MASK_PPD, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_SIZE_DEG
 
-# 3. Where the original background images are stored on your computer
+# 2. Inputs and output. This is a whole-window visualization (it ranks images by
+# NSS_diff and overlays Mooney fixations) with no Early/Late dimension, so it always
+# reads the whole-mode cross-phase results.
+STATS_PATH = Path("analysesresults/NSS_whole") / "NSS_crossphase_descriptives.pkl"  # cross-phase scores (ranking + DV)
+MAPS_PATH  = Path("analysesresults/NSS") / "FixMaps_full.pkl"                       # pre-blurred reference maps (shared)
+OUTPUT_DIR = Path("Figures/nss_separated_analyses/MooneysOnDisamb")
+
+# 3. Stimulus images. Machine-specific: edit these to run elsewhere.
 MOONEY_DIRS = [
     Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment_Code/RUN_ME/Stimuli/ImageTrials_Experiment'),
     Path('/Users/sofiakarageorgiou/Documents/GitHub/Experiment_Code/RUN_ME/Stimuli/ImageTrials_ExtraTrials')
@@ -84,7 +88,7 @@ def deg_to_image_pixels(x_deg, y_deg, ppd, *, width=IMAGE_WIDTH, height=IMAGE_HE
     return w, h  # x (col), y (row)
 
 # ============================================================================
-# IMAGE / DATA HELPERS - mirror NSSSVisualiser.py behaviour
+# IMAGE / DATA HELPERS
 # ============================================================================
 
 def find_image_file(img_name, directories):
@@ -179,8 +183,8 @@ def get_fixation_points(fixations, image_name, session, image_type, awareness=No
     """Pixel coords (x, y) of fixations for one image / session / image_type.
 
     Mirrors how each panel's map is built:
-      • Mooney maps are awareness-split  → pass awareness to filter the group.
-      • Disambiguator maps are session-split, NOT awareness-split → leave awareness=None
+      - Mooney maps are awareness-split  -> pass awareness to filter the group.
+      - Disambiguator maps are session-split, NOT awareness-split -> leave awareness=None
         (matches NSS.py reference maps and FixationDensityPlot)."""
     mask = (
         (fixations["ImageName"].astype(str) == str(image_name)) &
@@ -243,7 +247,7 @@ def _panel_diagnostic(ax, x_px, y_px):
         n = x_px.size
         pct_left = 100.0 * (x_px <= IMAGE_WIDTH  / 2).sum() / n
         pct_top  = 100.0 * (y_px <= IMAGE_HEIGHT / 2).sum() / n
-        label = f"Left {pct_left:.1f}%  ·  Top {pct_top:.1f}%  ·  n = {n:,}"
+        label = f"Left {pct_left:.1f}%  |  Top {pct_top:.1f}%  |  n = {n:,}"
     ax.text(0.5, 0.09, label, transform=ax.transAxes, ha="center", va="bottom",
             fontsize=12, color="#111111",
             bbox=dict(boxstyle="round,pad=0.35", facecolor="white", alpha=0.65, linewidth=0),
@@ -357,16 +361,16 @@ def main():
     ranked_images = rank_images_by_interaction(results)
     top = ranked_images[:N_TOP]
 
-    print(f"\nGenerating {len(top)} visualizations...")
+    print(f"\nGenerating {len(top)} figures...")
 
     for rank, (diff, nss_intact, nss_scrambled, img_name) in enumerate(top, start=1):
-        print(f"   [{rank:2d}/{len(top)}] Processing Image: {img_name}")
+        print(f"  [{rank:2d}/{len(top)}] {img_name}")
         fig = create_visualization(img_name, diff, fixation_maps, fixations, score_lookup)
         output_file = OUTPUT_DIR / f"Rank_{rank:02d}_{img_name}.png"
         fig.savefig(output_file, dpi=DPI, bbox_inches='tight', transparent=False)
         plt.close(fig)
 
-    print(f"\nDone! All images saved to: {OUTPUT_DIR}")
+    print(f"\nSaved {len(top)} figures to {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     main()

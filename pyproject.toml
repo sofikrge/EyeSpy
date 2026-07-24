@@ -8,6 +8,10 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    # Stage 1 (preprocessing) — pymovements drives it, polars is its DataFrame library
+    "pymovements>=0.27.0",
+    "polars>=1.41.2",
+    # Stage 2 (NSS analysis + plots)
     "matplotlib>=3.10.9",
     "numpy>=2.4.6",
     "pandas>=3.0.3",

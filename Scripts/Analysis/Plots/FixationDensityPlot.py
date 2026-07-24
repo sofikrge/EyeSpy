@@ -1,16 +1,12 @@
-"""
-FixationDensityPlot.py
-----------------------
-Aggregate fixation density heatmap across all images, split by awareness state
-and image type.
+"""Aggregate fixation density heatmap, split by awareness state and image type.
 
 3x3 grid:
     Rows    - awareness state: Conscious Aware / Unconscious Aware / Unconscious Unaware
     Columns - image type:      Post-Intact Mooney / Intact Disambiguator / Scrambled Disambiguator
 
 Each panel is built using the EXACT same pipeline as CreateFixationMaps_from_df in NSS.py:
-  1. Per participant per image  → uint32 hit map (bincount of fixation pixels)
-  2. Sum participant hit maps   → divide by n_subjects  →  per-image average map
+  1. Per participant per image  -> uint32 hit map (bincount of fixation pixels)
+  2. Sum participant hit maps   -> divide by n_subjects  ->  per-image average map
   3. Average per-image maps across all images in the cell
   4. gaussian_filter(sigma=PPD/2, mode='reflect', truncate=2.0)
      (blur is linear so blurring the average == averaging the blurred maps - one blur at the end)
@@ -21,30 +17,33 @@ Diagnostic line at the bottom of each panel:
     n       - total in-bounds fixation events summed across all images in the cell
               (raw count, not subject-averaged - gives a sense of data volume)
 
-Run from the project root:
-    python3 Scripts/Analysis/FixationDensityPlot.py
+The Mooney column is awareness-split; the disambiguator columns are SESSION-split, not
+awareness-split, matching how NSS.py builds its reference maps. The two unconscious rows
+therefore show the same session-U disambiguator data by design (labelled on each panel).
 
-Requires: data/NSS_all_fixations_clean.parquet  (produced by NSSExporter.py)
+Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
+Writes: Figures/nss_separated_analyses/FixationDensityPlot4.png
 """
 
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
+
 # =============================================================================
 # CONFIG
 # =============================================================================
 
-FIX_FILE    = Path("data/NSS_all_fixations_clean.parquet")
+# Canvas, pixels-per-degree and blur radius come from Settings.py so this figure is
+# built on exactly the same geometry as the NSS calculation it illustrates.
+from Settings import FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD, SIGMA
+
 OUTPUT_DIR  = Path("Figures/nss_separated_analyses")
 OUTPUT_FILE = OUTPUT_DIR / "FixationDensityPlot4.png"
-
-IMAGE_HEIGHT = 600    # eye-tracking canvas height in pixels - must match NSS.py
-IMAGE_WIDTH  = 800    # eye-tracking canvas width  in pixels - must match NSS.py
-MASK_PPD     = 48.55  # pixels per visual degree - must match NSS.py
-SIGMA        = MASK_PPD / 2.0  # Gaussian blur radius - identical to NSS.py
 
 COLORMAP    = "jet"
 DPI         = 180
@@ -101,18 +100,18 @@ def _deg_to_image_pixels(x_deg, y_deg):
 # =============================================================================
 
 def build_aggregate_density_map(df_cell):
-    """Build an aggregate fixation density map for one (awareness × image_type) cell.
+    """Build an aggregate fixation density map for one (awareness x image_type) cell.
 
     Follows CreateFixationMaps_from_df step by step:
-      • Per participant: binary hit map (uint32, same as NSS.py)
-      • Sum participants → float32, divide by n_subjects  →  per-image average map
-      • Accumulate per-image averages, divide by n_images  →  cross-image aggregate
-      • One gaussian_filter call at the end (equivalent to averaging blurred per-image
+      - Per participant: binary hit map (uint32, same as NSS.py)
+      - Sum participants -> float32, divide by n_subjects  ->  per-image average map
+      - Accumulate per-image averages, divide by n_images  ->  cross-image aggregate
+      - One gaussian_filter call at the end (equivalent to averaging blurred per-image
         maps because the filter is a linear operation)
 
     Returns
     -------
-    density : float32 array [IMAGE_HEIGHT × IMAGE_WIDTH]
+    density : float32 array [IMAGE_HEIGHT x IMAGE_WIDTH]
         Blurred aggregate map, unscaled.
     n_in_bounds : int
         Total in-bounds fixation events across all participants and images in this cell
@@ -218,7 +217,7 @@ def _draw_panel(ax, density, n_in_bounds, pct_left, pct_top):
     if np.isnan(pct_left):
         label = "No data"
     else:
-        label = f"Left {pct_left:.1f}%  ·  Top {pct_top:.1f}%  ·  n = {n_in_bounds:,}"
+        label = f"Left {pct_left:.1f}%  |  Top {pct_top:.1f}%  |  n = {n_in_bounds:,}"
     ax.text(0.5, 0.03, label,
             transform=ax.transAxes, ha="center", va="bottom",
             fontsize=8.5, color="#111111",
@@ -232,7 +231,7 @@ def _draw_panel(ax, density, n_in_bounds, pct_left, pct_top):
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("Loading fixations…")
+    print("Loading fixations...")
     fix = pd.read_parquet(FIX_FILE)
     fix["x_deg_centered"] = pd.to_numeric(fix["x_deg_centered"], errors="coerce")
     fix["y_deg"]          = pd.to_numeric(fix["y_deg"],          errors="coerce")
@@ -271,7 +270,7 @@ def main():
                 _style_axes(ax)
             else:
                 filter_desc = awareness_key if is_mooney else SESSION_LABEL[session_key]
-                print(f"  Building map: [{filter_desc:35s} × {img_type_key}]")
+                print(f"  Building map: [{filter_desc:35s} x {img_type_key}]")
                 density, n_in_bounds = build_aggregate_density_map(subset)
                 pct_left, pct_top    = _compute_split_percentages(subset)
 
@@ -303,7 +302,7 @@ def main():
     fig.savefig(OUTPUT_FILE, dpi=DPI, bbox_inches="tight",
                 facecolor=fig.get_facecolor())
     plt.close(fig)
-    print(f"\nSaved → {OUTPUT_FILE}")
+    print(f"\nSaved -> {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":

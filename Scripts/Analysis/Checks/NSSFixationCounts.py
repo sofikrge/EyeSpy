@@ -1,33 +1,29 @@
-"""
-NSSFixationCounts.py
---------------------
-How many fixations go into the cross-phase NSS calculation?
+"""How many fixations go into the cross-phase NSS calculation?
 
 The cross-phase NSS scores each participant's Post-Intact Mooney fixations (per
 trial) against the disambiguation-phase reference maps (intact + scrambled). Two
 sets of fixations therefore enter the calculation, and this script counts both,
 each split by awareness and intact vs scrambled:
 
-  TABLE 1 — Reference-map fixations
+  TABLE 1: Reference-map fixations
       Disambiguation-phase fixations that BUILD the reference maps, restricted to
       the maps actually used in scoring (i.e. images that survived the cross-phase
       drop rules). "Intact"/"Scrambled" = the disambiguator image type
       (disamb_intact / disamb_not_intact). Reference maps are pooled per session in
       NSS.py; the awareness split here shows their composition.
 
-  TABLE 2 — Scored Post-Intact Mooney fixations
+  TABLE 2: Scored Post-Intact Mooney fixations
       The DV: each Mooney fixation read off both reference maps. "Intact"/"Scrambled"
       = which reference it was scored against. Driven by the results pickle so every
       NSS.py drop rule (MIN_SUBJ_PER_IMAGE_CROSS, participant x trial unit, permissive
       NaN policy) is honored. A fixation scored against both references is counted in
       both columns; the distinct total is printed above the table.
 
-Run from the project root:
-    uv run python3 Scripts/Analysis/NSS/NSSFixationCounts.py
+The counts describe whatever calculation the pickle holds, so rerun NSS.py first if
+the NSS config has changed since.
 
-Requires:
-    data/NSS_all_fixations_clean.parquet                  (NSSExporter.py)
-    analysesresults/NSS/NSS_crossphase_descriptives.pkl   (NSS.py)
+Reads:  data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
+        analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
 """
 
 import pickle
@@ -37,16 +33,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for nss_paths
-import nss_paths
-_P = nss_paths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+from Scripts.Analysis.NSS import NSSPaths
+_P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
-# === CONFIG (must match NSS.py) ===
-FIX_FILE     = Path("data/NSS_all_fixations_clean.parquet")
-CROSS_PKL    = _P["CROSS_PKL"]
-IMAGE_HEIGHT = 600
-IMAGE_WIDTH  = 800
-MASK_PPD     = 48.55
+# === CONFIG ===
+# The in-bounds test below has to match CreateFixationMaps_from_df exactly, so the
+# geometry comes from the same place NSS.py reads it.
+from Settings import FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD
+
+CROSS_PKL = _P["CROSS_PKL"]
 
 UNIT_KEYS  = ["participant", "ImageName", "session", "trial_number", "awareness"]
 DISAMB_MAP = {"disamb_intact": "Intact", "disamb_not_intact": "Scrambled"}
@@ -61,7 +57,7 @@ def _in_bounds(x_deg, y_deg):
 
 def load_inbounds_fixations():
     """All finite, in-bounds fixations (the only ones that land on a map)."""
-    fix = nss_paths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
+    fix = NSSPaths.filter_trial_set(pd.read_parquet(FIX_FILE), _P["TRIAL_SET"])  # match NSS.py's trial set
     for c in ("x_deg_centered", "y_deg"):
         fix[c] = pd.to_numeric(fix[c], errors="coerce")
     fix = fix.dropna(subset=["x_deg_centered", "y_deg"])
@@ -127,19 +123,19 @@ def main():
     units, used_maps = load_scored_units()
 
     print("\n" + "=" * 70)
-    print("TABLE 1 — Reference-map fixations (disambiguation phase)")
+    print("TABLE 1: Reference-map fixations (disambiguation phase)")
     print(f"  build the {len(used_maps)} (image x session) reference maps used in scoring")
     ref = reference_map_table(fix, used_maps)
     print(f"  {int(ref['n_fixations'].sum()):,} total disambiguation fixations\n")
     _print_table(ref)
 
     print("=" * 70)
-    print("TABLE 2 — Scored Post-Intact Mooney fixations (the DV)")
+    print("TABLE 2: Scored Post-Intact Mooney fixations (the DV)")
     scored_tbl, scored = scored_mooney_table(fix, units)
     n_fix = int(scored["n_fixations"].sum())
     print(f"  {n_fix:,} distinct fixations  |  {len(scored):,} participant-trial units  "
           f"|  {scored['ImageName'].nunique()} images  |  {scored['participant'].nunique()} participants")
-    print("  (each scored against both references → counted in both columns)\n")
+    print("  (each scored against both references -> counted in both columns)\n")
     _print_table(scored_tbl)
 
 
