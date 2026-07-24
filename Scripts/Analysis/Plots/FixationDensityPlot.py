@@ -4,22 +4,13 @@
     Rows    - awareness state: Conscious Aware / Unconscious Aware / Unconscious Unaware
     Columns - image type:      Post-Intact Mooney / Intact Disambiguator / Scrambled Disambiguator
 
-Each panel is built using the EXACT same pipeline as CreateFixationMaps_from_df in NSS.py:
-  1. Per participant per image  -> uint32 hit map (bincount of fixation pixels)
-  2. Sum participant hit maps   -> divide by n_subjects  ->  per-image average map
-  3. Average per-image maps across all images in the cell
-  4. gaussian_filter(sigma=PPD/2, mode='reflect', truncate=2.0)
-     (blur is linear so blurring the average == averaging the blurred maps - one blur at the end)
-
-Diagnostic line at the bottom of each panel:
-    Left %  - fraction of in-bounds fixations in the left  half of the canvas (w_pixel <= WIDTH/2)
-    Top  %  - fraction of in-bounds fixations in the top   half of the canvas (h_pixel <= HEIGHT/2)
-    n       - total in-bounds fixation events summed across all images in the cell
-              (raw count, not subject-averaged - gives a sense of data volume)
+Map construction mirrors CreateFixationMaps_from_df in NSS.py exactly, so the figure
+shows the same maps the analysis scores against. The single blur at the end is valid
+because blurring is linear.
 
 The Mooney column is awareness-split; the disambiguator columns are SESSION-split, not
 awareness-split, matching how NSS.py builds its reference maps. The two unconscious rows
-therefore show the same session-U disambiguator data by design (labelled on each panel).
+therefore show the same session-U data by design (labelled on each panel).
 
 Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
 Writes: Figures/nss_separated_analyses/FixationDensityPlot4.png

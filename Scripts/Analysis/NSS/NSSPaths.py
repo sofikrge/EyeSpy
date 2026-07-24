@@ -1,35 +1,25 @@
-"""
-Shared Mooney-split / trial-set selection and output paths for the NSS pipeline.
+"""Run-mode selection and output paths for the NSS pipeline.
 
-Every NSS script that reads or writes the *cross-phase* outputs calls `select()`
-at startup, which prompts once for the Mooney-window mode ("whole" or "halves"),
-once for the trial set ("all" or "experiment"-block-only trials) and once for the
-blink mode ("filter" = original event-drop, or "interp" = PCHIP-interpolated blinks),
-so you can never run a script against the wrong version by forgetting a setting.
+Every script that reads or writes cross-phase outputs calls `select()` at startup, which
+prompts for the Mooney split, trial set and blink mode, so a script can never run against
+the wrong version of the results. Set the MOONEY_SPLIT, TRIAL_SET and BLINK_MODE
+environment variables to skip the prompts in scripted runs.
 
-Folder layout (relative to the project root, where these scripts are run from).
-<suffix> concatenates the trial-set suffix ("" for all, "_exponly" for experiment,
-"_extraonly" for extra) and then the blink-mode suffix ("" for filter, "_interp" for
-interp). For example "", "_interp", "_exponly", "_exponly_interp":
+Folder layout, relative to the project root. <suffix> is the trial-set suffix followed by
+the blink-mode suffix, e.g. "", "_interp", "_exponly", "_exponly_interp":
 
     analysesresults/NSS<suffix>/            shared across Mooney modes
         FixMaps_full.pkl
         NSS_WithinPhase.pkl
         NSS_WithinPhase_LongFormat.csv
-    analysesresults/NSS_<mode><suffix>/     per-mode  (mode = whole | halves)
+    analysesresults/NSS_<mode><suffix>/     mode = whole | halves
         NSS_crossphase_descriptives.pkl
         NSS_CrossPhase_LongFormat.csv
         NSS_CrossPhase_LongFormat_centred.csv
 
-Only the cross-phase step depends on the Mooney split, so FixMaps and the
-within-phase results are shared across modes (and never rebuilt when you switch).
-The trial set, however, changes the input fixations themselves (Extra-block
-trials are dropped entirely), so everything is versioned by it: FixMaps, within-phase
-and cross-phase.
-
-Non-interactive override: set the MOONEY_SPLIT ("whole"/"halves"), TRIAL_SET
-("all"/"experiment"/"extra") and BLINK_MODE ("filter"/"interp") environment
-variables to skip the prompts (handy for scripted/batch runs).
+Only the cross-phase step depends on the Mooney split, so FixMaps and within-phase are
+shared across modes and never rebuilt when you switch. The trial set changes the input
+fixations themselves, so it versions everything.
 """
 
 from pathlib import Path

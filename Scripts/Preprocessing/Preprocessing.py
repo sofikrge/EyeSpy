@@ -67,33 +67,27 @@ def _nearest_anchor_index(anchor):
 def _interpolate_segment(t_seg, coord_views, max_gap_samples, margin_samples):
     """PCHIP-fill short blink gaps within ONE contiguous recording segment, in place.
 
-    `coord_views` are numpy views into the per-coordinate arrays for this segment, so
-    writing into them updates the parent arrays. A blink is widened by `margin_samples`
-    on each side and bridged with a shape-preserving cubic (PCHIP). A blink reaching a
-    segment edge with valid data on only one side is left as-is (PCHIP won't extrapolate),
-    and a blink sitting right next to a long track-loss is left as-is too (see `local`
-    below) so the curve never bridges across the track-loss and fabricates position.
+    `coord_views` are numpy views into this segment's coordinate arrays, so writing into
+    them updates the parent arrays.
     """
     # Missing = the tracked eye is absent. In a binocular recording the untracked eye is
-    # null throughout, so 'all coordinates NaN' isolates the tracked eye's blinks/losses
-    # regardless of which eye it is or the pixel-column order (keying off coord 0 alone
-    # would treat a left-eye session -- coord 0 = right eye, all null -- as one giant gap).
+    # null throughout, so "all coordinates NaN" isolates the tracked eye regardless of
+    # which eye it is (keying off coord 0 alone would read a left-eye session, where
+    # coord 0 is the right eye and always null, as one giant gap).
     missing = np.stack([np.isnan(c) for c in coord_views]).all(axis=0)
     run_len = _missing_run_lengths(missing)
     short_blink = missing & (run_len <= max_gap_samples)   # real blinks -> fill
     long_gap    = missing & (run_len >  max_gap_samples)   # track loss  -> never fill
-    # Widen each short blink by the margin (Dankner et al.); never fill long-gap samples.
+    # Widen each short blink by the margin; never fill long-gap samples.
     # (binary_dilation with iterations<1 would fill the whole segment, so guard margin=0.)
     if margin_samples >= 1:
         fill_region = binary_dilation(short_blink, iterations=margin_samples) & ~long_gap
     else:
         fill_region = short_blink & ~long_gap
-    # Widest legitimate fill is one capped blink dilated by the margin on each side, so its
-    # bracketing anchors are that far apart (+1 for the flanking samples). If a fill sample's
-    # two anchors are further apart than that, a long track-loss lies between them and the
-    # PCHIP would bridge across it -> skip (leave as gap; its events drop downstream). This
-    # also drops tightly clustered blinks (< 2*margin apart, merged by dilation) -- ~700 ms
-    # of mostly peri-blink data we would rather not fabricate than bridge.
+    # Widest legitimate fill is one capped blink dilated on both sides, so its bracketing
+    # anchors sit that far apart. Anchors further apart than this mean a track loss lies
+    # between them and the curve would bridge it, so those samples are left as gaps. Side
+    # effect: blinks closer together than 2*margin get merged by the dilation and skipped.
     max_bridge = max_gap_samples + 2 * margin_samples + 1
     for v in coord_views:
         anchor = ~np.isnan(v) & ~fill_region     # fit on valid samples outside the fill region
@@ -105,26 +99,16 @@ def _interpolate_segment(t_seg, coord_views, max_gap_samples, margin_samples):
             v[fill_here] = curve[fill_here]
 
 def interpolate_blink_gaps(dataset, max_gap_ms, sampling_rate=1000, margin_ms=200):
-    """
-    Interpolate gaze POSITION across short blink gaps, in place, before velocity/event
-    detection, using a shape-preserving piecewise cubic Hermite polynomial (PCHIP, i.e.
-    MATLAB's `pchip`). This is a data-justified robustness alternative to the primary
-    blink-filter method, not a replication of one study; the PCHIP + peri-blink-margin
-    technique is standard (cf. Dankner et al. 2017; Kret & Sjak-Shie 2019), while the
-    `margin_ms` value is validated on this dataset's own peri-blink contamination profile.
-    During a blink EyeLink logs no position, so pymovements loads those samples as null in
-    the 'pixel' column. Each blink is widened by `margin_ms` on both sides (the flanking
-    samples are unreliable) and the region is bridged with a PCHIP curve fitted to the
-    remaining valid samples.
+    """PCHIP-interpolate gaze position across short blink gaps, in place, before velocity
+    and event detection. EyeLink logs no position during a blink, so pymovements loads
+    those samples as null. Each blink is widened by `margin_ms` and bridged with a curve
+    fitted to the remaining valid samples. See REFERENCES.md for the parameter rationale.
 
-    Only blinks whose RAW length (before the margin) is <= `max_gap_ms` are filled. Longer
-    null runs are treated as track loss (not a real blink), left as-is, so their events are
-    still dropped downstream. Gaps at the very start/end of a recording have valid data on
-    only one side; PCHIP does not extrapolate, so they are left as-is too (correct behaviour).
-
-    Each recording file contains several segments (blocks) separated by multi-second gaps in
-    the timeline; we interpolate each segment independently so a blink's margin and PCHIP
-    curve never bridge such a gap (which would overwrite real data in the next segment).
+    Three cases are deliberately left alone: blinks longer than `max_gap_ms` (track loss,
+    not a blink), gaps at a recording's edge (PCHIP does not extrapolate), and gaps
+    spanning two recording segments. Segments are the blocks within a file, separated by
+    multi-second timeline gaps, and are interpolated independently so no curve bridges
+    one and overwrites real data in the next.
     """
     # At `sampling_rate` Hz each sample spans 1000/rate ms.
     max_gap_samples = int(round(max_gap_ms * sampling_rate / 1000))

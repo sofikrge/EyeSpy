@@ -84,39 +84,14 @@ MIN_FIX_DURATION_MS = 50      # minimum fixation length
 BUFFER_FIX = 51   # 51ms for fixations
 BUFFER_SAC = 60   # 50ms + 10ms for saccades
 
-# --- Blink handling: two mutually exclusive modes ----------------------------------
-#
-#   False -> the primary, preregistered method: detect events first, then DROP any
-#            fixation/saccade overlapping a blink (in filter_events_blink_spatial).
-#   True  -> PCHIP-interpolate (shape-preserving cubic) the position ACROSS short blink
-#            gaps before event detection, so a blink-spanning fixation stays one
-#            continuous fixation. The blink event-drop step is then skipped; the
-#            spatial filtering still applies.
-#
-# The interpolation mode is a data-justified robustness alternative to the filter method,
-# not a replication of any one study. Each blink is widened by BLINK_MARGIN_MS on both
-# sides (peri-blink samples are unreliable) and the region is filled with a PCHIP curve.
-#
-# Why a 200 ms margin: it is validated on THIS dataset's peri-blink contamination profile,
-# where pupil and gaze velocity recover ~150 ms after a blink (see the Diagnostics scripts
-# and DataQualityChecks/), rather than borrowed wholesale from another study.
-#
-# Why a 150 ms cap: only blinks whose raw length (before the margin) is <= this get
-# filled; anything longer is track loss and is left as a gap. 150 ms is the most
-# permissive value we found support for on GAZE POSITION rather than pupil: Tobii's I-VT
-# gap fill-in defaults to 75 ms and must stay "shorter than a blink", and Wass, Smith &
-# Johnson (2013) go to 150 ms. It sits well above this dataset's median blink (~89 ms
-# across the 24 analysed sessions), so it rescues ~77% of genuine short blinks while
-# refusing to fabricate gaze across the 150-500 ms range. Those are full eyelid closures
-# where the eye can move behind the lid, exactly what position interpolation must not
-# bridge when the DV is a location. (Raising the cap to 500 ms would rescue only those
-# ~1,500 longer blinks.)
-#
-# The PCHIP + peri-blink-margin technique itself is standard: Dankner et al. (2017),
-# Kret & Sjak-Shie (2019), both on pupil. See REFERENCES.md.
+# --- Blink handling: two mutually exclusive modes
+#   False -> drop events overlapping a blink (the primary, preregistered method)
+#   True  -> PCHIP-interpolate position across short blinks before event detection,
+#            so a blink-spanning fixation survives as one fixation
+# Rationale and sources for all three values: REFERENCES.md.
 INTERPOLATE_BLINKS = True
-MAX_BLINK_INTERP_MS = 150
-BLINK_MARGIN_MS = 200   # +/- window removed around each blink before interpolation (validated on this dataset)
+MAX_BLINK_INTERP_MS = 150   # longer gaps are track loss, left as gaps
+BLINK_MARGIN_MS = 200       # each blink is widened by this before interpolating
 
 IMAGE_SIZE_DEG = (9.99, 7.50)
 CENTER_RADIUS_DG = 1.5 #shaked's value
@@ -184,31 +159,26 @@ PHASE_PALETTE  = ['#b3cde3', '#8c96c6', '#88419d']
 
 NSS_DEBUG = True   # separate from Stage 1's DEBUG: prints per-image NSS diagnostics
 
-# The fixation-map canvas. Not the screen resolution: fixations are mapped into this
-# eye-tracking canvas, with degree 0 at its centre.
+# Fixation-map canvas, not the screen resolution: fixations are mapped into it with
+# degree 0 at its centre. Inherited from the MATLAB implementation (REFERENCES.md).
 IMAGE_HEIGHT = 600
 IMAGE_WIDTH  = 800
 MASK_PPD     = 48.55            # pixels per visual degree
 SIGMA        = MASK_PPD / 2.0   # Gaussian blur radius for the fixation maps
 
-# Input parquet written by NSSExporter.py.
-FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")
+FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")   # written by NSSExporter.py
 
 # How much data an image needs before it is scored at all.
 MIN_SUBJ_PER_IMAGE_NSS    = 2    # within-phase: minimum subjects per image
 MIN_SUBJ_PER_IMAGE_CROSS  = 2    # cross-phase: minimum Mooney subjects per image
-MIN_IMAGES_PER_CELL_CROSS = 15   # cross-phase: drop a participant's awareness x reference
-                                 # cell if it holds fewer valid scores than this
+MIN_IMAGES_PER_CELL_CROSS = 15   # cross-phase: minimum valid scores per participant cell
 
-# Missing reference maps in the cross-phase step:
-#   "permissive"    ignore a NaN reference and average whatever is present
-#   "matlab_strict" require both references, otherwise the image scores NaN
+# Missing reference maps: "permissive" averages whatever is present,
+# "matlab_strict" requires both references or scores the image NaN.
 NAN_POLICY_CROSS = "permissive"
 
-# 0 = population sd (the spread of the data present); set to 1 for sample sd.
-# 0 is what MATLAB's original implementation used, so leave it unless comparing.
-DISPERSION_DDOF = 0
+DISPERSION_DDOF = 0   # population sd, for MATLAB parity (REFERENCES.md)
 
-# Thresholds used only by the reporting scripts in Scripts/Analysis/Checks/.
+# Reporting thresholds, used only by Scripts/Analysis/Checks/.
 MIN_IMAGES_PER_PARTICIPANT = 15   # ImagePerParticipant.py flags anyone below this
 MIN_FIX_PER_PARTICIPANT    = 20   # LeftBiasPerParticipant.py ignores thinner cells

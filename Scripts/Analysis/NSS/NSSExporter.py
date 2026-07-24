@@ -6,14 +6,13 @@ in (mooney_post_intact / mooney_post_not_intact / disamb_intact / disamb_not_int
 Fixations that fall in no valid class are dropped.
 
 Two derived columns are added here rather than in NSS.py, because both need the phase
-boundaries that only Stage 1 carries:
+boundaries only Stage 1 carries:
   - Mooney_Half   Early/Late half of the 3 s Mooney window, from onset - mooney_start.
-  - trial_number  renumbered to be unique within a session: Experiment trials keep
-                  1-133, Extra-block trials get +300 (301-452, so they also sort in
-                  true session order, the Extra block having run second).
+  - trial_number  renumbered unique within a session: Experiment keeps 1-133, Extra gets
+                  +300 (301-452), so trials also sort in true session order.
 
-Numeric columns are cast to Float64 before concatenation, because sessions otherwise
-disagree on Int64 vs Float64 and the schemas will not merge.
+Numeric columns are cast to Float64 first, or sessions disagree on Int64 vs Float64 and
+the schemas will not merge.
 
 Reads:  data/events_cleaned/s_<session>_<participant>.csv   (RunPreprocessing.py)
 Writes: data/NSS_all_fixations_clean.parquet

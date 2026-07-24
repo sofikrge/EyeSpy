@@ -1,15 +1,9 @@
 """Mooney fixations overlaid on the disambiguator reference maps they were scored against.
 
-A more *direct* way of looking at the cross-phase NSS than three separate heatmaps.
-
-The cross-phase NSS score is literally: "how well do the Mooney-phase fixations land on
-the disambiguation-phase saliency map?" - scored once against the INTACT reference map and
-once against the SCRAMBLED reference map (NSS_diff = intact - scrambled).
-
-Instead of showing three independent heatmaps and asking the viewer to mentally compute the
-overlap, this script overlays the actual Mooney fixation LOCATIONS on top of the intact and
-scrambled reference maps side by side. If the Mooney fixations sit on the hot regions of the
-scrambled map more than the intact map, you can SEE why NSS_scrambled > NSS_intact.
+Cross-phase NSS asks how well Mooney-phase fixations land on the disambiguation-phase
+saliency map, scored once against intact and once against scrambled. Three separate
+heatmaps leave the viewer to compute that overlap mentally; overlaying the fixations on
+the two reference maps makes it visible directly.
 
 One 3x3 figure per image, for the N_TOP images with the most negative UU NSS_diff:
     Rows    - Conscious Aware / Unconscious Aware / Unconscious Unaware

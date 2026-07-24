@@ -37,12 +37,10 @@ import zlib
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 
 #%% === CONFIG ===
-# All tunable values live in Settings.py so there is one file to edit. Only the
-# per-run choices are resolved here: NSSPaths.select() (in __main__) prompts for the
-# Mooney split, trial set and blink mode, and derives the output folders from them.
+# Tunable values live in Settings.py. Only the per-run choices are resolved here, by
+# NSSPaths.select() in __main__:
 #   Mooney split "whole"  -> score the full 3 s Mooney presentation as one unit
-#                "halves" -> score each 1.5 s half (Early/Late, from the parquet's
-#                            Mooney_Half column) against the same whole disamb refs
+#                "halves" -> score each 1.5 s half (Early/Late) against the same refs
 from Settings import (
     FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD, SIGMA,
     MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS,
@@ -639,10 +637,9 @@ if __name__ == "__main__":
     OUTPUT_DIR = _P["OUTPUT_DIR"]
     _P["SHARED_DIR"].mkdir(parents=True, exist_ok=True)
 
-    # Blink mode ("filter"/"interp") comes from NSSPaths.select() (prompt or $BLINK_MODE);
-    # it already selected the matching *_interp output folder. We also stamp it into every
-    # cache meta below so switching blink mode forces a recompute instead of silently
-    # returning the other mode's cached pickle. Must match how Stage 1 built the parquet.
+    # Blink mode must match how Stage 1 built the parquet. NSSPaths.select() has already
+    # picked the matching output folder; stamping it into every cache meta below makes a
+    # mode switch force a recompute rather than return the other mode's pickle.
     BLINK_MODE = _P["BLINK_MODE"]
 
     # ---- Build fixmaps ----
@@ -854,10 +851,8 @@ if __name__ == "__main__":
     # Experiment block split at each participant's median trial (Exp_First /
     # Exp_Second) plus the whole Extra block as the third level.
     df_long['Trial'] = pd.to_numeric(df_long['Trial'])
-    # Median is computed on Experiment-block trials only (Trial <= 300; the exporter
-    # renumbers Extra trials +300) so the Extra viewings can't tilt the split. Compute
-    # it on UNIQUE trials so a trial appearing a different number of times (e.g. the
-    # Early/Late rows in halves mode) can't shift the median.
+    # Median over Experiment-block trials only (Trial <= 300), and over UNIQUE trials, so
+    # neither the Extra viewings nor a trial's row count can tilt the split.
     exp_median = (
         df_long[df_long['Trial'] <= 300]
                .drop_duplicates(['Participant', 'Session', 'Trial'])
@@ -871,11 +866,9 @@ if __name__ == "__main__":
     )
     df_long = df_long.drop(columns='exp_median')
 
-    # Block label from the exporter's +300 Extra-block renumbering (Experiment 1-133,
-    # Extra 301-452): lets Jamovi filter to one block or use it as a covariate. The
-    # disambiguator reference maps pool both blocks (keyed by session, not block), so
-    # both viewings are scored against the same reference and any Block difference in
-    # NSS reflects the Mooney gaze, not the reference.
+    # Block label from the exporter's +300 Extra renumbering, for filtering in Jamovi.
+    # Reference maps are keyed by session, not block, so both viewings score against the
+    # same reference and any Block difference reflects the Mooney gaze, not the reference.
     df_long['Block'] = np.where(df_long['Trial'] > 300, 'Extra', 'Experiment')
 
     # Long format sasving

@@ -27,17 +27,15 @@ from pathlib import Path
 #   False -> all three groups (Conscious Aware + both unconscious groups)
 UNCONSCIOUS_ONLY = True
 
-# Trial set: [a]ll / [e]xperiment-block only / e[x]tra-block only (prompt, or $TRIAL_SET env var).
-# Picks which whole-mode results folder is read (NSS_whole / NSS_whole_exponly / NSS_whole_extraonly).
+# Trial set and blink mode (prompts, or the $TRIAL_SET / $BLINK_MODE env vars) pick
+# which whole-mode results folder is read.
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 from Scripts.Analysis.NSS import NSSPaths
 TRIAL_SET = NSSPaths.ask_trial_set()
 BLINK_MODE = NSSPaths.ask_blink_mode()  # filter (original) / interp (PCHIP); picks the *_interp folder
 
-# Whole-window plot (awareness x Intact/Scrambled). It has no Early/Late dimension,
-# so it always reads the whole-mode cross-phase results. The halves comparison has its
-# own plot (CrossNSSHalvesLinePlot.py).
+# No Early/Late dimension here, so always the whole-mode results.
 INPUT_FILE  = NSSPaths.paths_for("whole", TRIAL_SET, BLINK_MODE)["CROSS_CSV"]
 OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 _SUFFIX = NSSPaths.TRIAL_SET_SUFFIX[TRIAL_SET] + NSSPaths.BLINK_SUFFIX[BLINK_MODE]
@@ -50,10 +48,8 @@ OUTPUT_PLOT = OUTPUT_DIR / (
 PALETTE = ['#edf8fb', '#b3cde3', '#648fff', '#785ef0']
 REF_COLORS = {"Intact": PALETTE[3], "Scrambled": PALETTE[2]}
 
-# Map (Session, Awareness) -> display label.
-# If your "Awareness" column uses different strings than "Aware"/"Unaware"
-# (case, spelling, etc.), the script prints the unique pairs it found at
-# runtime - edit the keys below to match those exactly.
+# Map (Session, Awareness) -> display label. The script prints the unique pairs it
+# found at runtime, so edit these keys to match if the labels ever change.
 GROUP_MAP = {
     ("C", "conscious_aware"):   "Conscious Aware\n(PAS 2-3)",
     ("U", "unconscious_aware"):   "Unconscious Aware\n(PAS 2-3)",
@@ -64,9 +60,8 @@ if UNCONSCIOUS_ONLY:
     GROUP_ORDER = ["Unconscious Aware\n(PAS 2-3)", "Unconscious Unaware\n(PAS 0)"]
 
 
-# Model EMMs pasted in by hand from the fitted lmer. Drawn whenever DRAW_EMMS is True,
-# regardless of TRIAL_SET / BLINK_MODE, so YOU are responsible for pasting EMMs that
-# match the model you actually ran. Set DRAW_EMMS = False to hide the diamonds.
+# Model EMMs, pasted in by hand from the fitted lmer. Drawn whenever DRAW_EMMS is True
+# regardless of TRIAL_SET / BLINK_MODE, so make sure they match the model you ran.
 DRAW_EMMS = True
 
 # With image filtering
