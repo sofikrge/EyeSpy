@@ -15,8 +15,13 @@ no test suite.
 uv sync
 ```
 
-Python 3.14. The pipeline expects the data laid out like this (everything under `data/`
-is gitignored, only code is tracked):
+Python 3.14. Dependencies are pinned to exact versions in `pyproject.toml`, so `uv sync`
+rebuilds the environment these results were produced with. `pymovements` in particular
+does the event detection, so upgrading it can change the fixations everything downstream
+is built on: bump a version deliberately, then rerun and check the results still hold.
+
+The pipeline expects the data laid out like this (everything under `data/` is
+gitignored, only code is tracked):
 
 ```
 data/my_dataset/raw/s_<SESSION>_<PID>.asc

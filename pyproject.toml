@@ -7,24 +7,23 @@ authors = [
     { name = "sofikrge", email = "150954568+sofikrge@users.noreply.github.com" }
 ]
 requires-python = ">=3.14"
+# Pinned exactly, not ">=", so `uv sync` always rebuilds the environment these results
+# were produced with. An upgrade to pymovements in particular could change event
+# detection and therefore the fixations everything downstream is built on. Bump a
+# version deliberately, then rerun the pipeline and check the results still hold.
 dependencies = [
-    # Stage 1 (preprocessing) — pymovements drives it, polars is its DataFrame library
-    "pymovements>=0.27.0",
-    "polars>=1.41.2",
-    # Stage 2 (NSS analysis + plots)
-    "matplotlib>=3.10.9",
-    "numpy>=2.4.6",
-    "pandas>=3.0.3",
-    "scipy>=1.17.1",
-    "seaborn>=0.13.2",
+    # Stage 1 (preprocessing): pymovements drives it, polars is its DataFrame library
+    "pymovements==0.27.0",
+    "polars==1.41.2",
+    # Stage 2 (NSS analysis and plots)
+    "matplotlib==3.10.9",
+    "numpy==2.4.6",
+    "pandas==3.0.3",
+    "scipy==1.17.1",
+    "seaborn==0.13.2",
 ]
 
 # This repo is a collection of analysis scripts, not an installable package,
-# so uv treats it as a non-package project (no build backend / entry point).
+# so uv treats it as a non-package project (no build backend, no entry point).
 [tool.uv]
 package = false
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-]
