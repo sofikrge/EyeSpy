@@ -1,9 +1,14 @@
 """Run-mode selection and output paths for the NSS pipeline.
 
-Every script that reads or writes cross-phase outputs calls `select()` at startup, which
-prompts for the Mooney split, trial set and blink mode, so a script can never run against
-the wrong version of the results. Set the MOONEY_SPLIT, TRIAL_SET and BLINK_MODE
-environment variables to skip the prompts in scripted runs.
+Every script that reads or writes cross-phase outputs calls `select()` at startup. The
+modes come from Settings.py, so a full run needs no arguments and no prompts:
+
+    MOONEY_SPLIT  and  TRIAL_SET   read from Settings.py
+    BLINK_MODE                     derived from Settings.INTERPOLATE_BLINKS
+
+Deriving the blink mode is what stops the analysis reading a results folder Stage 1 never
+built. The three values can still be overridden for one-off runs by setting the
+MOONEY_SPLIT / TRIAL_SET / BLINK_MODE environment variables.
 
 Folder layout, relative to the project root. <suffix> is the trial-set suffix followed by
 the blink-mode suffix, e.g. "", "_interp", "_exponly", "_exponly_interp":
@@ -40,70 +45,55 @@ TRIAL_SET_SUFFIX = {"all": "", "experiment": "_exponly", "extra": "_extraonly"}
 BLINK_SUFFIX = {"filter": "", "interp": "_interp"}
 
 
-def _no_tty_exit(var: str, values: tuple) -> None:
-    raise SystemExit(
-        f"{var} is not set and there is no terminal to prompt on. "
-        f"Set the environment variable {var}={'|'.join(values)} and rerun."
-    )
+def _from_settings(var: str, valid: tuple, settings_attr: str) -> str:
+    """Resolve one run mode: the environment wins if set, otherwise Settings.py."""
+    env = os.environ.get(var, "").strip().lower()
+    if env:
+        if env not in valid:
+            raise SystemExit(f"${var}={env!r} is not one of {valid}.")
+        print(f"[NSSPaths] {var} = {env}  (environment override)")
+        return env
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root
+    import Settings
+
+    value = getattr(Settings, settings_attr)
+    if value not in valid:
+        raise SystemExit(f"Settings.{settings_attr} = {value!r} is not one of {valid}.")
+    print(f"[NSSPaths] {var} = {value}  (Settings.py)")
+    return value
 
 
 def ask_mooney_split() -> str:
-    """Return "whole"/"halves" from $MOONEY_SPLIT if set, otherwise prompt the user."""
-    env = os.environ.get("MOONEY_SPLIT", "").strip().lower()
-    if env in VALID:
-        print(f"[NSSPaths] MOONEY_SPLIT = {env}  (from environment)")
-        return env
-    if not (sys.stdin and sys.stdin.isatty()):
-        _no_tty_exit("MOONEY_SPLIT", VALID)
-    while True:
-        answer = input("\nWhich Mooney-window version? [w]hole / [h]alves: ").strip().lower()
-        if answer in ("w", "whole"):
-            return "whole"
-        if answer in ("h", "halves"):
-            return "halves"
-        print("  Please type 'w' (whole) or 'h' (halves).")
+    """Mooney-window mode: "whole" or "halves"."""
+    return _from_settings("MOONEY_SPLIT", VALID, "MOONEY_SPLIT")
 
 
 def ask_trial_set() -> str:
-    """Return "all"/"experiment"/"extra" from $TRIAL_SET if set, otherwise prompt the user."""
-    env = os.environ.get("TRIAL_SET", "").strip().lower()
-    if env in VALID_TRIAL_SET:
-        print(f"[NSSPaths] TRIAL_SET = {env}  (from environment)")
-        return env
-    if not (sys.stdin and sys.stdin.isatty()):
-        _no_tty_exit("TRIAL_SET", VALID_TRIAL_SET)
-    while True:
-        answer = input("Which trials? [a]ll / [e]xperiment-block only / e[x]tra-block only: ").strip().lower()
-        if answer in ("a", "all"):
-            return "all"
-        if answer in ("e", "experiment"):
-            return "experiment"
-        if answer in ("x", "extra"):
-            return "extra"
-        print("  Please type 'a' (all), 'e' (experiment-block only) or 'x' (extra-block only).")
+    """Trial set: "all", "experiment" or "extra"."""
+    return _from_settings("TRIAL_SET", VALID_TRIAL_SET, "TRIAL_SET")
 
 
 def ask_blink_mode() -> str:
-    """Return "filter"/"interp" from $BLINK_MODE if set, otherwise prompt the user.
+    """Blink mode, derived from Settings.INTERPOLATE_BLINKS.
 
-    Must match how Stage 1 built the parquet ("filter" = blinks dropped, the original
-    pipeline; "interp" = blinks PCHIP-interpolated). It is not recorded in the parquet,
-    so choosing it here both selects the *_interp output folder and lets NSS.py stamp it
-    into the cache meta.
+    It has to match how Stage 1 built the parquet, and the parquet does not record it.
+    Deriving it from the same flag Stage 1 used removes that whole class of mistake: the
+    mode both picks the *_interp output folder and gets stamped into NSS.py's cache meta.
     """
     env = os.environ.get("BLINK_MODE", "").strip().lower()
-    if env in VALID_BLINK:
-        print(f"[NSSPaths] BLINK_MODE = {env}  (from environment)")
+    if env:
+        if env not in VALID_BLINK:
+            raise SystemExit(f"$BLINK_MODE={env!r} is not one of {VALID_BLINK}.")
+        print(f"[NSSPaths] BLINK_MODE = {env}  (environment override)")
         return env
-    if not (sys.stdin and sys.stdin.isatty()):
-        _no_tty_exit("BLINK_MODE", VALID_BLINK)
-    while True:
-        answer = input("Which blink handling? [f]ilter (drop, original) / [i]nterp (PCHIP): ").strip().lower()
-        if answer in ("f", "filter"):
-            return "filter"
-        if answer in ("i", "interp"):
-            return "interp"
-        print("  Please type 'f' (filter) or 'i' (interp).")
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root
+    import Settings
+
+    mode = "interp" if Settings.INTERPOLATE_BLINKS else "filter"
+    print(f"[NSSPaths] BLINK_MODE = {mode}  (from Settings.INTERPOLATE_BLINKS={Settings.INTERPOLATE_BLINKS})")
+    return mode
 
 
 def paths_for(mooney_split: str, trial_set: str = "all", blink_mode: str = "filter") -> dict:
@@ -156,5 +146,5 @@ def filter_trial_set(fixations_df, trial_set: str):
 
 
 def select() -> dict:
-    """Prompt (or read $MOONEY_SPLIT / $TRIAL_SET / $BLINK_MODE) and return the resolved path dict."""
+    """Resolve the run modes from Settings.py (or the env overrides) and return the paths."""
     return paths_for(ask_mooney_split(), ask_trial_set(), ask_blink_mode())

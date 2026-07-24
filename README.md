@@ -31,7 +31,7 @@ Two stages that communicate only through files on disk, never through imports:
 
 ```
 data/my_dataset/raw/*.asc  +  behavioural/*.mat
-    |   Stage 1: RunPreprocessing.py
+    |   Stage 1: CompleteRun.py
     v
 data/events_cleaned/*.csv  +  all_events_cleaned.csv
     |   Stage 2: NSSExporter.py
@@ -45,16 +45,21 @@ analysesresults/    pickled caches + long-format CSVs for Jamovi
 Figures/            plots
 ```
 
-### Stage 1: preprocessing
+### The whole pipeline
 
 ```bash
-python3 RunPreprocessing.py
+python3 CompleteRun.py
 ```
 
-Runs pymovements (load, `pix2deg`, offset correction, `pos2vel`, IVT event
+Runs everything: preprocessing, then `NSSExporter.py`, then `NSS.py`. It takes no
+arguments and asks no questions, because every setting comes from `Settings.py`.
+
+Stage 1 runs pymovements (load, `pix2deg`, offset correction, `pos2vel`, IVT event
 detection) and then this project's own steps: blink and spatial filtering, trial and
 phase reconstruction from the `.asc` marker codes, the behavioural merge, and the
-exclusions. Everything is configured in `Settings.py`.
+exclusions. Stage 2 then builds the fixation parquet and computes the NSS scores.
+
+The individual scripts still run on their own if you only need one stage.
 
 **Blink handling** has two mutually exclusive modes, set by `INTERPOLATE_BLINKS` in
 `Settings.py`. `False` drops blink-overlapping events; `True` PCHIP-interpolates gaze
@@ -63,9 +68,7 @@ If you change it, rerun Stage 1 and set `BLINK_MODE` to match in Stage 2. The th
 scripts in `Scripts/Preprocessing/Diagnostics/` justify the interpolation parameters
 from the raw data and can be run on their own.
 
-### Stage 2: NSS analysis
-
-Run in order, from the project root:
+### Running one stage at a time
 
 ```bash
 python3 Scripts/Analysis/NSS/NSSExporter.py   # cleaned CSVs -> one fixation parquet
@@ -73,37 +76,39 @@ python3 Scripts/Analysis/NSS/NSS.py           # fixation maps, within/cross-phas
 ```
 
 Then any of the checks in `Scripts/Analysis/Checks/` and the plots in
-`Scripts/Analysis/Plots/`.
+`Scripts/Analysis/Plots/`. All of them read the same run modes from `Settings.py`, so
+they always agree with the last full run.
 
 ### Analysis modes
 
-Results are versioned by three choices. Scripts whose output depends on them **prompt at
-startup**, so you cannot accidentally run against the wrong version. Set the environment
-variables to skip the prompts:
+Results are versioned by three choices, all resolved from `Settings.py`:
 
-| Variable | Values | What it changes |
+| Setting | Values | What it changes |
 |---|---|---|
 | `MOONEY_SPLIT` | `whole` \| `halves` | Score the 3 s Mooney window as one unit, or as two 1.5 s halves (Early/Late) |
 | `TRIAL_SET` | `all` \| `experiment` \| `extra` | Which block's trials enter the analysis |
-| `BLINK_MODE` | `filter` \| `interp` | **Must match how Stage 1 built the parquet.** It is not recorded in the file |
+| `INTERPOLATE_BLINKS` | `True` \| `False` | Stage-1 blink handling. The Stage-2 blink mode is **derived** from it, so the analysis can only read a folder Stage 1 built |
+
+For a one-off run without editing `Settings.py`, the environment overrides them:
 
 ```bash
-MOONEY_SPLIT=whole TRIAL_SET=all BLINK_MODE=filter python3 Scripts/Analysis/NSS/NSS.py
+TRIAL_SET=extra python3 Scripts/Analysis/NSS/NSS.py
 ```
 
 Output folders are suffixed to match: `analysesresults/NSS_whole/`,
 `NSS_whole_exponly_interp/`, and so on. `Scripts/Analysis/NSS/NSSPaths.py` is the single
 source of truth for these paths.
 
-`RunAllInterpolations.py` runs the whole thing end to end once per blink mode.
+To compare the two blink-handling methods, set `INTERPOLATE_BLINKS` in `Settings.py`,
+run `CompleteRun.py`, then flip it and run again. Each mode writes to its own results
+folder, so the two never overwrite each other.
 
 ## Repo map
 
 | Path | What it is |
 |---|---|
 | `Settings.py` | Every tunable parameter for both stages. The one file to edit |
-| `RunPreprocessing.py` | Stage-1 entry point |
-| `RunAllInterpolations.py` | Runs the full pipeline once per blink mode |
+| `CompleteRun.py` | Runs the whole pipeline: preprocessing, export, NSS |
 | `Scripts/Preprocessing/` | The Stage-1 steps pymovements does not cover, one file per concern: gaze correction, blink interpolation, event filtering, trial metadata |
 | `Scripts/Preprocessing/Diagnostics/` | Standalone justification of the blink-interpolation parameters |
 | `Scripts/Analysis/NSS/` | The export, the NSS calculation, and `NSSPaths.py` (run modes and output paths) |
@@ -118,8 +123,9 @@ Every script's docstring says what it reads and what it writes.
   it: screen geometry, thresholds, blink handling, marker codes, the participant and
   block exclusions (`EXCLUDE_SESSIONS`, `EXCLUDE_BLOCKS`), and the Stage-2 canvas size,
   pixels-per-degree and subject thresholds.
-- The per-run choices are the exception: Mooney split, trial set and blink mode are
-  picked at runtime, because they select which results folder is written.
+- That includes the run modes (`MOONEY_SPLIT`, `TRIAL_SET`), which select the results
+  folder. The blink mode is not a separate setting: it follows from
+  `INTERPOLATE_BLINKS`.
 - `DEBUG` gates I/O, not just logging: with it on, the intermediate `data/events/` CSVs
   and all the QC figures under `DataQualityChecks/` get written. `NSS_DEBUG` is the
   separate Stage-2 flag.

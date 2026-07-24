@@ -1,14 +1,23 @@
-"""Stage 1: raw EyeLink recordings -> cleaned fixation/saccade event tables.
+"""The whole pipeline, start to finish: raw EyeLink recordings -> NSS results.
 
-Top-to-bottom orchestration, written as `#%%` cells so it can also be stepped through
-in an interactive window. Every parameter comes from Settings.py; nothing is configured
-here. Run it from the project root:
+    Stage 1  preprocessing, in this process
+    Stage 2  NSSExporter.py then NSS.py, each as a subprocess
 
-    python3 RunPreprocessing.py
+Every parameter comes from Settings.py and nothing is configured here, so a run needs
+no arguments and asks no questions. That includes the run modes: MOONEY_SPLIT and
+TRIAL_SET are read from Settings.py, and BLINK_MODE is derived from INTERPOLATE_BLINKS,
+so Stage 2 can only ever read the results folder Stage 1 just built.
+
+Written as `#%%` cells, so Stage 1 can still be stepped through in an interactive window
+without triggering Stage 2. Run it from the project root:
+
+    python3 CompleteRun.py
 
 Reads:  data/my_dataset/raw/s_<SESSION>_<PID>.asc
         data/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
 Writes: data/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
+        data/NSS_all_fixations_clean.parquet
+        analysesresults/NSS[_suffix]/ and analysesresults/NSS_<mode>[_suffix]/
         DataQualityChecks/  (figures, only when DEBUG is on in Settings.py)
 """
 
@@ -91,5 +100,31 @@ trials.apply_behavioral_filters_and_save(
     exclude_subjects=settings.EXCLUDE_SUBJECTS,
     exclude_sessions=settings.EXCLUDE_SESSIONS,
     exclude_blocks=settings.EXCLUDE_BLOCKS)
+
+#%% Stage 2: NSS analysis
+# Run as subprocesses rather than imports: both scripts do their work at module level,
+# and a fresh process keeps Stage 1's dataset out of their memory. They read the same
+# Settings.py this run used, so no arguments are passed.
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+STAGE2 = [
+    ROOT / "Scripts/Analysis/NSS/NSSExporter.py",   # events_cleaned CSVs -> fixation parquet
+    ROOT / "Scripts/Analysis/NSS/NSS.py",           # fixation maps, within/cross-phase NSS
+]
+
+blink_mode = "interp" if settings.INTERPOLATE_BLINKS else "filter"
+print(f"\n{'=' * 70}")
+print(f"Stage 1 complete. Running Stage 2 with MOONEY_SPLIT={settings.MOONEY_SPLIT}, "
+      f"TRIAL_SET={settings.TRIAL_SET}, BLINK_MODE={blink_mode}")
+print("=" * 70)
+
+for script in STAGE2:
+    print(f"\n----- {script.relative_to(ROOT)} -----", flush=True)
+    subprocess.run([sys.executable, str(script)], cwd=ROOT, check=True)
+
+print("\nPipeline complete.")
 
 # %%

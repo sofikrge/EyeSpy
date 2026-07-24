@@ -157,6 +157,16 @@ PHASE_PALETTE  = ['#b3cde3', '#8c96c6', '#88419d']
 #%% =========================== STAGE 2: NSS ANALYSIS ============================
 # Read by NSS.py and by the Checks/ and Plots/ scripts. 
 
+# --- Run modes: which version of the results this run reads and writes
+#   MOONEY_SPLIT  "whole"  score the full 3 s Mooney presentation as one unit
+#                 "halves" score each 1.5 s half (Early/Late) against the same refs
+#   TRIAL_SET     "all" | "experiment" (Experiment block only) | "extra" (Extra only)
+# BLINK_MODE is not set here: it is derived from INTERPOLATE_BLINKS above, so the
+# analysis can never read a results folder that Stage 1 did not build.
+# Output folders are suffixed to match, e.g. NSS_whole, NSS_whole_exponly_interp.
+MOONEY_SPLIT = "whole" # "whole" | "halves"
+TRIAL_SET    = "all" # "all" | "experiment" | "extra"
+
 NSS_DEBUG = True   # separate from Stage 1's DEBUG: prints per-image NSS diagnostics
 
 # Fixation-map canvas, not the screen resolution: fixations are mapped into it with

@@ -14,7 +14,7 @@ boundaries only Stage 1 carries:
 Numeric columns are cast to Float64 first, or sessions disagree on Int64 vs Float64 and
 the schemas will not merge.
 
-Reads:  data/events_cleaned/s_<session>_<participant>.csv   (RunPreprocessing.py)
+Reads:  data/events_cleaned/s_<session>_<participant>.csv   (CompleteRun.py)
 Writes: data/NSS_all_fixations_clean.parquet
         columns: ImageName, session, image_type, participant, x_deg_centered, y_deg,
                  condition, trial_number, awareness, Mooney_Half, block_type
