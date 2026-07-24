@@ -13,7 +13,10 @@ Writes: data/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
 """
 
 #%% Imports
-import Scripts.Preprocessing.Preprocessing as prep
+import Scripts.Preprocessing.BlinkInterpolation as blinks
+import Scripts.Preprocessing.GazeCorrection as gaze
+import Scripts.Preprocessing.EventFiltering as events
+import Scripts.Preprocessing.TrialMetadata as trials
 import Settings as settings
 
 #%% Load data
@@ -24,7 +27,7 @@ settings.dataset.load()
 
 #%% Optional blink interpolation (must run on raw pixels, before pix2deg)
 if settings.INTERPOLATE_BLINKS:
-    settings.dataset = prep.interpolate_blink_gaps(
+    settings.dataset = blinks.interpolate_blink_gaps(
         settings.dataset, settings.MAX_BLINK_INTERP_MS,
         settings.SCREEN["sampling_rate"], settings.BLINK_MARGIN_MS)
 
@@ -33,13 +36,13 @@ print("\nConverting to visual degrees...")
 settings.dataset.pix2deg()
 
 print("\nApplying eye offset correction...")
-settings.dataset = prep.shift_gaze_offset(settings.dataset, settings.EYE_OFFSET)
+settings.dataset = gaze.shift_gaze_offset(settings.dataset, settings.EYE_OFFSET)
 
 print("\nAdding velocity column...")
 settings.dataset.pos2vel(method='fivepoint')
 
 print("\nFiltering and reporting validations...")
-prep.filter_and_report_validations(
+events.filter_and_report_validations(
     settings.dataset,settings.data_quality_folder,
     settings.VALIDATION_ACCURACY_AVG_THRESHOLD,
     settings.VALIDATION_ACCURACY_MAX_THRESHOLD)
@@ -57,7 +60,7 @@ settings.dataset.compute_event_properties(['location', 'amplitude', 'peak_veloci
 
 #%% Blink and spatial filtering
 print("\nFiltering events (blinks and spatial bounds)...")
-prep.filter_events_blink_spatial(
+events.filter_events_blink_spatial(
     dataset=settings.dataset, raw_data_dir=settings.RAW_DATA_DIR,
     buffer_fix=settings.BUFFER_FIX, buffer_sac=settings.BUFFER_SAC,
     hx=settings.HX, hy=settings.HY,
@@ -70,7 +73,7 @@ prep.filter_events_blink_spatial(
 
 #%% Assign trial metadata 
 print("\nAssigning trial metadata and image phases to events...")
-prep.assign_trial_metadata_and_phases(
+trials.assign_trial_metadata_and_phases(
     dataset=settings.dataset, raw_data_dir=settings.RAW_DATA_DIR,
     behavioural_dir=settings.BEHAVIOURAL_DIR, events_out_dir=settings.EVENTS_OUT_DIR,
     trial_labels=settings.TRIAL_LABELS,
@@ -82,7 +85,7 @@ prep.assign_trial_metadata_and_phases(
 
 #%% Behavioural filtering
 print("\nApplying final behavioral filtering...")
-prep.apply_behavioral_filters_and_save(
+trials.apply_behavioral_filters_and_save(
     dataset=settings.dataset,
     output_dir=settings.EVENTS_CLEANED_DIR,
     exclude_subjects=settings.EXCLUDE_SUBJECTS,

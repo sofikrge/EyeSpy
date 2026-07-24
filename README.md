@@ -104,7 +104,7 @@ source of truth for these paths.
 | `Settings.py` | Every tunable parameter for both stages. The one file to edit |
 | `RunPreprocessing.py` | Stage-1 entry point |
 | `RunAllInterpolations.py` | Runs the full pipeline once per blink mode |
-| `Scripts/Preprocessing/` | The Stage-1 steps pymovements does not cover |
+| `Scripts/Preprocessing/` | The Stage-1 steps pymovements does not cover, one file per concern: gaze correction, blink interpolation, event filtering, trial metadata |
 | `Scripts/Preprocessing/Diagnostics/` | Standalone justification of the blink-interpolation parameters |
 | `Scripts/Analysis/NSS/` | The export, the NSS calculation, and `NSSPaths.py` (run modes and output paths) |
 | `Scripts/Analysis/Checks/` | Diagnostics on the cached results: dropped images, cell sizes, per-participant coverage |
