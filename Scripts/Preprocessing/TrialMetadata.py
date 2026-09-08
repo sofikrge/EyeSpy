@@ -180,6 +180,14 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
     """
 
     os.makedirs(output_dir, exist_ok=True)
+
+    # Clear the previous run's per-session CSVs. An excluded session is skipped below
+    # rather than written, so its old file would survive and NSSExporter.py, which reads
+    # whatever it finds in this folder, would carry the exclusion straight back in.
+    for stale in os.listdir(output_dir):
+        if stale.startswith("s_") and stale.endswith(".csv"):
+            os.remove(os.path.join(output_dir, stale))
+
     combined = []
 
     # Normalize exclusion keys to strings: participant IDs in Settings are ints

@@ -68,10 +68,22 @@ def round_half_away_from_zero(x):
     x = np.asarray(x, dtype=float)
     return (np.sign(x) * np.floor(np.abs(x) + 0.5)).astype(int)
 
+def _fixations_stamp() -> tuple[int, int]:
+    """Size and mtime of the fixations parquet, so a rebuilt input invalidates the caches.
+
+    Everything else in the meta is configuration; without this a rerun that changes only
+    the data (an added exclusion, say) would match the meta and silently return the old
+    result. A rebuild with identical content also recomputes, which is the safe direction.
+    """
+    st = FIX_FILE.stat()
+    return (st.st_size, int(st.st_mtime))
+
+
 def _meta_block(ppd: float, image_h: int, image_w: int, group_cols: tuple[str, ...], *,
                 tag: str, extra: dict | None = None) -> dict:
     """Generate metadata dictionary for cache use, to ensure cache is only used if metadata matches """
     base = {
+        "fixations": _fixations_stamp(),
         "pixels_per_vdegree": float(ppd),
         "sigma_px": float(ppd) / 2.0,
         "image_size": (int(image_h), int(image_w)),
