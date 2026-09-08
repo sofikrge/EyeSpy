@@ -150,8 +150,17 @@ EXCLUDE_SESSIONS = {
 #    112: ['C'], # unfocused eyes sometimes
 }
 
+# How many Experiment blocks a session has before its Extra blocks begin. Only used to
+# read EXCLUDE_BLOCKS below; every session of both datasets records exactly four.
+N_EXPERIMENT_BLOCKS = 4
+
 # Exclude specific BLOCKS per session per participant
 # Format: { ParticipantID: { 'SessionID': [BlockNums] } }
+# Block numbers are the session's RUNNING ORDER, the way they are written down during
+# recording: 1-4 are the Experiment blocks, 5 onwards are the Extra blocks (5 = Extra 1).
+# The saved BlockNum column restarts at 1 in the Extra block, so the numbers here are not
+# that column; TrialMetadata.apply_behavioral_filters_and_save translates them, and warns
+# about any number the session does not actually have.
 EXCLUDE_BLOCKS = {
 #    112: {'U': [4, 5]},             # Unfocused eyes sometimes
     117: {'C': [1]},                # Technical mistake

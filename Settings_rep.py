@@ -20,7 +20,7 @@ EYE_OFFSET = {"left": +5.31, "right": -5.31}   # horizontal eye offset, visual d
 
 # Exclusions, defined here even while empty: without them the replication run would
 # inherit the pilot's participant numbers from Settings.py. Fill in as they are decided.
-EXCLUDE_SUBJECTS = [        # whole participants, e.g. 104, 106
+EXCLUDE_SUBJECTS = [103, 109, 120,     # not enough PAS 0 trials
 ]
 
 # Whole sessions, format: { ParticipantID: ['SessionLetter'] }
@@ -29,6 +29,7 @@ EXCLUDE_SESSIONS = {
 }
 
 # Single blocks, format: { ParticipantID: { 'SessionLetter': [BlockNums] } }
+# Numbers are the session's running order: 1-4 Experiment, 5-8 Extra (5 = Extra 1).
 EXCLUDE_BLOCKS = {106: {'U': [3, 5]}, # moved camera mid block
                   107: {'U': [7]}, # pupil lost mid block
                   109: {'U': [2]}, # Talya accidentally turned on light and then turned off again, IDK when exactly

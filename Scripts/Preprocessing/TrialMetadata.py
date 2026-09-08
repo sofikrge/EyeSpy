@@ -8,7 +8,7 @@ The last stretch of Stage 1, in call order:
                                      per-session CSVs and the combined file
 """
 
-from Settings import PHASE_PALETTE, MAT_FIELD_MAP
+from Settings import PHASE_PALETTE, MAT_FIELD_MAP, N_EXPERIMENT_BLOCKS
 import polars as pl
 import os
 import numpy as np
@@ -202,9 +202,27 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
         # Keep PAS 0, 2, 3 in both sessions, drop PAS 1
         pas_mask = ~pl.col("response_PAS_Q").is_in([1])
 
-        # Block exclusions specific to this participant/session
+        # Block exclusions specific to this participant/session. Settings lists blocks
+        # in the session's running order (Experiment 1-4, then the Extra blocks as 5, 6,
+        # ...); BlockNum restarts at 1 in the Extra block, so a bare number would match
+        # one block of each type. Translate each entry into the pair it actually names,
+        # and say so when a number matches no block rather than dropping nothing quietly.
         bad_blocks = exclude_blocks.get(p_id, {}).get(s_id, [])
-        block_mask = ~pl.col("BlockNum").is_in(bad_blocks)
+        present = {
+            (bt, int(bn))
+            for bt, bn in ev.frame.select("block_type", "BlockNum").unique().rows()
+            if bt is not None and bn is not None
+        }
+        block_mask = pl.lit(True)
+        for n in bad_blocks:
+            pair = (("Experiment", n) if n <= N_EXPERIMENT_BLOCKS
+                    else ("Extra", n - N_EXPERIMENT_BLOCKS))
+            if pair not in present:
+                print(f"  [WARN] {p_id}{s_id}: excluded block {n} is {pair[0]} block "
+                      f"{pair[1]}, which this session does not have - nothing removed.")
+            block_mask = block_mask & ~(
+                (pl.col("block_type") == pair[0]) & (pl.col("BlockNum") == pair[1])
+            )
 
         final_mask = (
             (pl.col("NumRepetitionFixationFail").fill_null(0) <= 0) &

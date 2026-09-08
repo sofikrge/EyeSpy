@@ -6,13 +6,15 @@
                     they form a single vertical line within each half-violin.
 
 A whole-window figure with no Early/Late dimension, so it always reads the whole-mode
-results (the halves comparison has its own plot, CrossNSSHalvesLinePlot.py). It does
-prompt for the trial set and blink mode, and suffixes the output PNG to match. The
-model EMM diamonds come from the all-trials lmer, so they are drawn in all-trials mode
-only.
+results (the halves comparison has its own plot, CrossNSSHalvesLinePlot.py). It takes the
+trial set and blink mode from Settings.py and suffixes the output PNG to match, and it
+follows the dataset switch: under EYESPY_DATASET=rep it reads analysesresults_rep/ and
+writes to Figures_rep/ with a _rep suffix, so pilot and replication figures never mix.
+The model EMM diamonds are hand-pasted from one specific lmer fit, so DRAW_EMMS is off
+by default.
 
-Reads:  analysesresults/NSS_whole[_suffix]/NSS_CrossPhase_LongFormat.csv   (NSS.py)
-Writes: Figures/nss_analyses/NSS_CrossPhase_Violin_byAwareness*.png
+Reads:  analysesresults[_rep]/NSS_whole[_suffix]/NSS_CrossPhase_LongFormat.csv   (NSS.py)
+Writes: Figures[_rep]/nss_analyses/NSS_CrossPhase_Violin_byAwareness*.png
 """
 
 import pandas as pd
@@ -32,13 +34,16 @@ UNCONSCIOUS_ONLY = True
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 from Scripts.Analysis.NSS import NSSPaths
+from Settings import _SUFFIX as DATASET_SUFFIX  # "" for the pilot, "_rep" under EYESPY_DATASET=rep
 TRIAL_SET = NSSPaths.ask_trial_set()
 BLINK_MODE = NSSPaths.ask_blink_mode()  # filter (original) / interp (PCHIP); picks the *_interp folder
 
 # No Early/Late dimension here, so always the whole-mode results.
 INPUT_FILE  = NSSPaths.paths_for("whole", TRIAL_SET, BLINK_MODE)["CROSS_CSV"]
-OUTPUT_DIR  = Path("Figures/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-_SUFFIX = NSSPaths.TRIAL_SET_SUFFIX[TRIAL_SET] + NSSPaths.BLINK_SUFFIX[BLINK_MODE]
+# Replication figures go to Figures_rep/ and carry a _rep filename suffix, so a rep run
+# can never overwrite (or be mistaken for) the pilot figure of the same mode.
+OUTPUT_DIR  = Path(f"Figures{DATASET_SUFFIX}/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+_SUFFIX = NSSPaths.TRIAL_SET_SUFFIX[TRIAL_SET] + NSSPaths.BLINK_SUFFIX[BLINK_MODE] + DATASET_SUFFIX
 OUTPUT_PLOT = OUTPUT_DIR / (
     f"NSS_CrossPhase_Violin_byAwareness_unconsciousOnly{_SUFFIX}.png"
     if UNCONSCIOUS_ONLY else
@@ -61,8 +66,10 @@ if UNCONSCIOUS_ONLY:
 
 
 # Model EMMs, pasted in by hand from the fitted lmer. Drawn whenever DRAW_EMMS is True
-# regardless of TRIAL_SET / BLINK_MODE, so make sure they match the model you ran.
-DRAW_EMMS = True
+# regardless of DATASET / TRIAL_SET / BLINK_MODE, so make sure they match the model you ran.
+# Off by default: the values below are the pilot's all-trials model, so they are wrong for
+# any other dataset or trial set. Set True again once you paste in matching EMMs.
+DRAW_EMMS = False
 
 # With image filtering
 #EMMS = {
@@ -77,6 +84,12 @@ EMMS = {
     "Unconscious Aware\n(PAS 2-3)":   {"Intact": 2.06, "Scrambled": 1.69},
     "Unconscious Unaware\n(PAS 0)":   {"Intact": 2.07, "Scrambled": 2.32}
 }
+
+# Write each participant's number next to their dot, to identify the individuals whose
+# Intact-vs-Scrambled line runs against their group. Intact labels sit to the left of
+# their dots and Scrambled ones to the right, so the text stays clear of the lines
+# crossing between the two halves.
+ANNOTATE_PARTICIPANTS = True
 
 DOT_OFFSET = 0.17  # horizontal nudge so dots sit under each half-violin; tweak if misaligned
 REF_OFFSET = {"Intact": -DOT_OFFSET, "Scrambled": DOT_OFFSET}
@@ -127,6 +140,29 @@ def main():
     # Dots at fixed x_pos -> single vertical line per half-violin
     ax.scatter(df_agg["x_pos"], df_agg["NSS"], color="grey", 
                linewidth=0.5, s=20, alpha=0.8, zorder=3)
+
+    if ANNOTATE_PARTICIPANTS:
+        # Participants with near-identical means would print their numbers on top of each
+        # other, so each half-violin's labels are walked bottom-up and pushed apart to a
+        # minimum spacing. A thin leader line then ties a moved label back to its own dot.
+        y_lo, y_hi = ax.get_ylim()
+        min_gap = (y_hi - y_lo) * 0.022
+        for _, col in df_agg.groupby(["Group", "ReferenceMap"]):
+            col = col.sort_values("NSS")
+            side = -1 if col["ReferenceMap"].iloc[0] == "Intact" else 1
+            label_y = []
+            for y in col["NSS"]:
+                label_y.append(y if not label_y else max(y, label_y[-1] + min_gap))
+            for row, y_lab in zip(col.itertuples(), label_y):
+                ax.annotate(
+                    str(row.Participant),
+                    xy=(row.x_pos, row.NSS),                    # the dot itself
+                    xytext=(row.x_pos + side * 0.04, y_lab),    # the decluttered label
+                    ha="right" if side < 0 else "left", va="center",
+                    fontsize=6.5, color="#333333", zorder=6,
+                    arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.4,
+                                    shrinkA=0, shrinkB=2),
+                )
 
     # Overlay the hand-pasted EMM diamonds whenever DRAW_EMMS is on (mode-independent).
     _draw_emms = DRAW_EMMS
