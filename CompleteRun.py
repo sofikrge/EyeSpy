@@ -13,6 +13,10 @@ without triggering Stage 2. Run it from the project root:
 
     python3 CompleteRun.py
 
+The DATASET toggle at the top picks which dataset to run on: data/ (Settings.py) or
+data_rep/ (Settings.py with Settings_rep.py applied on top). Paths below are shown for
+data/; a data_rep run writes the same tree under data_rep/ and analysesresults_rep/.
+
 Reads:  data/my_dataset/raw/s_<SESSION>_<PID>.asc
         data/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
 Writes: data/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
@@ -20,6 +24,15 @@ Writes: data/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
         analysesresults/NSS[_suffix]/ and analysesresults/NSS_<mode>[_suffix]/
         DataQualityChecks/  (figures, only when DEBUG is on in Settings.py)
 """
+
+#%% Dataset toggle  (must be set before Settings is imported)
+# "data"     the pilot dataset in data/,     configured by Settings.py
+# "data_rep" the replication set in data_rep/, Settings.py plus Settings_rep.py on top
+# Everything downstream follows: the events/parquet folders, DataQualityChecks[_rep]/
+# and analysesresults[_rep]/. Stage 2 inherits the choice through the environment.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ["EYESPY_DATASET"] = "rep" if DATASET == "data_rep" else ""
 
 #%% Imports
 import Scripts.Preprocessing.BlinkInterpolation as blinks
@@ -117,7 +130,7 @@ STAGE2 = [
 
 blink_mode = "interp" if settings.INTERPOLATE_BLINKS else "filter"
 print(f"\n{'=' * 70}")
-print(f"Stage 1 complete. Running Stage 2 with MOONEY_SPLIT={settings.MOONEY_SPLIT}, "
+print(f"Stage 1 complete. Running Stage 2 on {DATASET} with MOONEY_SPLIT={settings.MOONEY_SPLIT}, "
       f"TRIAL_SET={settings.TRIAL_SET}, BLINK_MODE={blink_mode}")
 print("=" * 70)
 

@@ -10,7 +10,8 @@ Deriving the blink mode is what stops the analysis reading a results folder Stag
 built. The three values can still be overridden for one-off runs by setting the
 MOONEY_SPLIT / TRIAL_SET / BLINK_MODE environment variables.
 
-Folder layout, relative to the project root. <suffix> is the trial-set suffix followed by
+Folder layout, relative to the project root ("analysesresults" is Settings.ANALYSES_ROOT,
+so a data_rep run writes the same tree under analysesresults_rep/). <suffix> is the trial-set suffix followed by
 the blink-mode suffix, e.g. "", "_interp", "_exponly", "_exponly_interp":
 
     analysesresults/NSS<suffix>/            shared across Mooney modes
@@ -105,8 +106,10 @@ def paths_for(mooney_split: str, trial_set: str = "all", blink_mode: str = "filt
     if blink_mode not in VALID_BLINK:
         raise ValueError(f"blink_mode must be one of {VALID_BLINK}, got {blink_mode!r}")
     suffix = TRIAL_SET_SUFFIX[trial_set] + BLINK_SUFFIX[blink_mode]  # trial set, then blink mode
-    shared_dir = Path(f"analysesresults/NSS{suffix}")  # mode-independent: FixMaps + within-phase
-    out_dir = Path(f"analysesresults/NSS_{mooney_split}{suffix}")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root
+    from Settings import ANALYSES_ROOT   # "analysesresults", or "analysesresults_rep"
+    shared_dir = Path(f"{ANALYSES_ROOT}/NSS{suffix}")  # mode-independent: FixMaps + within-phase
+    out_dir = Path(f"{ANALYSES_ROOT}/NSS_{mooney_split}{suffix}")
     out_dir.mkdir(parents=True, exist_ok=True)
     return {
         "MOONEY_SPLIT": mooney_split,

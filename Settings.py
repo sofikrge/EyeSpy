@@ -23,12 +23,21 @@ import matplotlib.pyplot as plt
 import pymovements as pm
 from pathlib import Path
 
+#%% ============================ DATASET SELECTION ==============================
+# Which dataset this run works on. CompleteRun.py sets EYESPY_DATASET from its
+# DATASET toggle; set it by hand (EYESPY_DATASET=rep) when running a Stage-2 script
+# on its own. "rep" swaps in the data_rep/ folder and applies Settings_rep.py at the
+# bottom of this file, so every parameter below can be overridden per dataset.
+REP       = os.environ.get("EYESPY_DATASET", "") == "rep"
+DATA_ROOT = "data_rep" if REP else "data"
+_SUFFIX   = "_rep" if REP else ""
+
 #%% =========================== STAGE 1: PREPROCESSING ===========================
 
 DEBUG = True
 
 dataset_paths = pm.DatasetPaths(
-    root='data/', 
+    root=f'{DATA_ROOT}/', 
     raw='raw', 
     preprocessed='preprocessed', 
     events='events')
@@ -64,7 +73,7 @@ dataset_definition = pm.DatasetDefinition(
 dataset = pm.Dataset(definition=dataset_definition, path=dataset_paths)
 
 # Folders (each writer creates it on demand, so nothing is made just by importing)
-data_quality_folder = 'DataQualityChecks/'
+data_quality_folder = f'DataQualityChecks{_SUFFIX}/'
 
 # Validation thresholds
 VALIDATION_ACCURACY_AVG_THRESHOLD = 1.0  # degrees
@@ -73,10 +82,10 @@ VALIDATION_ACCURACY_MAX_THRESHOLD = 1.5  # degrees
 # Offset value of eyes in visual degrees 
 EYE_OFFSET = {"left": +5.44, "right": -5.44} 
 
-RAW_DATA_DIR = os.path.join('data', 'my_dataset', 'raw') # path to raw data for manual blink parsing
-EVENTS_OUT_DIR = os.path.join('data', 'events')
-BEHAVIOURAL_DIR = Path("data/my_dataset/behavioural") # path to behavioural data
-EVENTS_CLEANED_DIR = os.path.join('data', 'events_cleaned')
+RAW_DATA_DIR = os.path.join(DATA_ROOT, 'my_dataset', 'raw') # path to raw data for manual blink parsing
+EVENTS_OUT_DIR = os.path.join(DATA_ROOT, 'events')
+BEHAVIOURAL_DIR = Path(f"{DATA_ROOT}/my_dataset/behavioural") # path to behavioural data
+EVENTS_CLEANED_DIR = os.path.join(DATA_ROOT, 'events_cleaned')
 
 FIX_VELOCITY_THRESHOLD = 30.0  # degrees per second
 MIN_FIX_DURATION_MS = 50      # minimum fixation length
@@ -176,7 +185,8 @@ IMAGE_WIDTH  = 800
 MASK_PPD     = 48.55            # pixels per visual degree
 SIGMA        = MASK_PPD / 2.0   # Gaussian blur radius for the fixation maps
 
-FIX_FILE = Path("data/NSS_all_fixations_clean.parquet")   # written by NSSExporter.py
+FIX_FILE = Path(f"{DATA_ROOT}/NSS_all_fixations_clean.parquet")   # written by NSSExporter.py
+ANALYSES_ROOT = f"analysesresults{_SUFFIX}"   # NSSPaths.py builds its NSS_* folders in here
 
 # How much data an image needs before it is scored at all.
 MIN_SUBJ_PER_IMAGE_NSS    = 2    # within-phase: minimum subjects per image
@@ -192,3 +202,11 @@ DISPERSION_DDOF = 0   # population sd, for MATLAB parity (REFERENCES.md)
 # Reporting thresholds, used only by Scripts/Analysis/Checks/.
 MIN_IMAGES_PER_PARTICIPANT = 15   # ImagePerParticipant.py flags anyone below this
 MIN_FIX_PER_PARTICIPANT    = 20   # LeftBiasPerParticipant.py ignores thinner cells
+
+
+#%% ======================= REPLICATION-DATASET OVERRIDES ========================
+# Applied last, so Settings_rep.py can override anything above for the data_rep/
+# dataset. The pilot run never touches it.
+if REP:
+    print("[Settings] EYESPY_DATASET=rep -> applying Settings_rep.py overrides")
+    from Settings_rep import *  # noqa: F401,F403

@@ -2,7 +2,7 @@
 
 # Pipeline input and output.
 # The * suffixes also catch the one-off variant folders (*OLD, *BackUp, RIGHTINTERPOL*).
-data/
+data*/
 *analysesresults*/
 DataQualityChecks*/
 Figures*/

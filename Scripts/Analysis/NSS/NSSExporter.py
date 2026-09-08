@@ -23,10 +23,15 @@ Writes: data/NSS_all_fixations_clean.parquet
 import polars as pl
 import os
 import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
+from Settings import EVENTS_CLEANED_DIR, FIX_FILE   # follow the dataset in use
 
 # === CONFIG ===
-INPUT_DIR = "data/events_cleaned"
-OUTPUT_FILE = "data/NSS_all_fixations_clean.parquet"
+INPUT_DIR = EVENTS_CLEANED_DIR
+OUTPUT_FILE = str(FIX_FILE)
 
 # Regex to extract metadata from filename "s_C_101.csv"
 # Group 1 = Session (Letters), Group 2 = Participant (Digits)
