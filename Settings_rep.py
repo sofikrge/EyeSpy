@@ -35,6 +35,9 @@ EXCLUDE_BLOCKS = {106: {'U': [3, 5]}, # moved camera mid block
                   109: {'U': [2]}, # Talya accidentally turned on light and then turned off again, IDK when exactly
                   118: {'U': [3]}, # Pupil lost mid block, so redid C&V
                   123: {'U': [1, 2]}, # told me he saw images outside of the frame so i think he was unfocusing his eyes, told him not to do it afterwards
+                  126: {'U': [5]}, # stopped mid block
+                  127: {'U': [1, 2, 8]},
+                  129: {'U': [2]},
                   
 
 }

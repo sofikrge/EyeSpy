@@ -138,6 +138,19 @@ def print_cell_shares(sessions, counts):
         print(f"average {name:<{width}} %   " + "  ".join(shares).rstrip())
 
 
+def print_both_cells_met(sessions, counts):
+    """How many sessions clear PAS_0_THRESHOLD% on every cell at once.
+
+    A session needs both to be usable: too few PAS 0 answers and it has no unaware cell,
+    too few PAS 2/3 and it has no aware one. Counting the cells apart would hide the
+    sessions that fall short on one side or the other, so this is what survives both.
+    """
+    met = sum(all(100 * sum(c[level] for level in levels) / max(sum(c.values()), 1)
+                  >= PAS_0_THRESHOLD for _, levels in CELLS) for c in counts)
+    cells = " and ".join(name for name, _ in CELLS)
+    print(f"at least {PAS_0_THRESHOLD}% {cells}: {met}/{len(sessions)} sessions")
+
+
 files = sorted(BEH_DIR.glob("expdata_*.mat"))
 if not files:
     raise SystemExit(f"no expdata_<SESSION>_<PID>.mat files under {BEH_DIR.resolve()}")
@@ -159,6 +172,7 @@ for ax, (title, counts, levels, labels) in zip(axes.flat, asked):
     if title == "PAS":                   # only the PAS answers decide the awareness cells
         below = flag_thin_cells(ax, sessions, counts)
         print_cell_shares(sessions, counts)
+        print_both_cells_met(sessions, counts)
         print(f"under {PAS_0_THRESHOLD}% PAS 0: {', '.join(below) if below else 'none'}")
 
 fig.suptitle(f"Response distribution per session  -  {BEH_DIR}", fontsize=11)

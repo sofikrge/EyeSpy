@@ -210,6 +210,25 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
         # Keep PAS 0, 2, 3 in both sessions, drop PAS 1
         pas_mask = ~pl.col("response_PAS_Q").is_in([1])
 
+        # Preregistration exclusion (b): "the trial occurring BEFORE a trial with a broken
+        # fixation during the fixation cross presentation". NumRepetitionFixationFail marks
+        # the trial whose fixation broke; it is the trial before it that is dropped, and the
+        # flagged trial itself is kept. trial_number runs 1..N across a viewing's four
+        # blocks, so the preceding trial is simply trial_number - 1 within the same
+        # block_type.
+        pre_break_keys = (
+            ev.frame
+            .filter(pl.col("NumRepetitionFixationFail").fill_null(0) > 0)
+            .select("block_type", (pl.col("trial_number") - 1).alias("trial_number"))
+            .unique()
+            .rows()
+        )
+        pre_break_mask = pl.lit(False)
+        for bt, tn in pre_break_keys:
+            pre_break_mask = pre_break_mask | (
+                (pl.col("block_type") == bt) & (pl.col("trial_number") == tn)
+            )
+
         # Block exclusions specific to this participant/session. Settings lists blocks
         # in the session's running order (Experiment 1-4, then the Extra blocks as 5, 6,
         # ...); BlockNum restarts at 1 in the Extra block, so a bare number would match
@@ -233,7 +252,7 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
             )
 
         final_mask = (
-            (pl.col("NumRepetitionFixationFail").fill_null(0) <= 0) &
+            ~pre_break_mask &
             (pl.col("DidRespondPas").fill_null(0) != 0) &
             (pl.col("phase") != "inter_stimulus") &
             (pl.col("block_type") != "Practice") &
