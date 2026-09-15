@@ -7,7 +7,7 @@ answers, split by response, so an unusable session is visible while data is stil
 collected. Reads the behavioural files only; nothing else in the pipeline has to have run.
 
 Reads:  <behavioural>/expdata_<SESSION>_<PID>.mat   (the Experiment and Extra trials)
-Writes: Figures/ResponseDistributions.png
+Writes: Figures[_rep]/ResponseDistributions.png
 """
 
 import sys
@@ -18,13 +18,22 @@ import numpy as np
 import scipy.io as sio
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
-from Settings import BEHAVIOURAL_DIR, SECTION_TO_BLOCK, FILTER_PALETTE
+# Which dataset this figure is built from  (must be set before Settings is imported,
+# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
+# the parquet and results folder read, and the Figures[_rep]/ folder written.
+#   "data"     the pilot in data/            -> Figures/
+#   "data_rep" the replication in data_rep/  -> Figures_rep/
+# setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
 
-# The dataset to plot: Settings.py's own, or another one's behavioural folder.
-BEH_DIR = Path("data_rep/my_dataset/behavioural")   # or Path(BEHAVIOURAL_DIR), Settings.py's own
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
+from Settings import BEHAVIOURAL_DIR, SECTION_TO_BLOCK, FILTER_PALETTE, _SUFFIX as DATASET_SUFFIX
+
+BEH_DIR = Path(BEHAVIOURAL_DIR)                     # follows the DATASET toggle above
 SECTIONS = [s for s in SECTION_TO_BLOCK if s != "Trials_Practice"]  # practice never counts
-OUT_PNG = Path("Figures/ResponseDistributions.png")
+OUT_PNG = Path(f"Figures{DATASET_SUFFIX}/ResponseDistributions.png")
 
 # One panel per question the dataset actually recorded: the .mat field, its responses in
 # scale order, and their labels.

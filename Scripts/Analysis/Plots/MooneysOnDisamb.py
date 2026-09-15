@@ -13,10 +13,10 @@ One 3x3 figure per image, for the N_TOP images with the most negative UU NSS_dif
 MOONEY_DIRS / DISAMB_DIRS below are absolute paths to the stimulus images and must be
 edited to run on another machine.
 
-Reads:  analysesresults/NSS_whole/NSS_crossphase_descriptives.pkl   (NSS.py)
-        analysesresults/NSS/FixMaps_full.pkl                        (NSS.py)
-        data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
-Writes: Figures/nss_separated_analyses/MooneysOnDisamb/Rank_<nn>_<image>.png
+Reads:  analysesresults[_rep]/NSS_whole[_suffix]/NSS_crossphase_descriptives.pkl (NSS.py)
+        analysesresults[_rep]/NSS[_suffix]/FixMaps_full.pkl                     (NSS.py)
+        data[_rep]/NSS_all_fixations_clean.parquet                              (NSSExporter.py)
+Writes: Figures[_rep]/nss_separated_analyses/MooneysOnDisamb/Rank_<nn>_<image>.png
 """
 
 import sys
@@ -28,19 +28,32 @@ import matplotlib.image as mpimg
 from pathlib import Path
 from scipy.fft import fft2, ifft2
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
-
 # === CONFIG ===
 
+# Which dataset this figure is built from  (must be set before Settings is imported,
+# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
+# the parquet and results folder read, and the Figures[_rep]/ folder written.
+#   "data"     the pilot in data/            -> Figures/
+#   "data_rep" the replication in data_rep/  -> Figures_rep/
+# setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
+
 # 1. Geometry, shared with NSS.py so the overlay lines up with the reference maps.
-from Settings import FIX_FILE, MASK_PPD, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_SIZE_DEG
+from Settings import FIX_FILE, MASK_PPD, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_SIZE_DEG, _SUFFIX as DATASET_SUFFIX
+from Scripts.Analysis.NSS import NSSPaths
 
 # 2. Inputs and output. This is a whole-window visualization (it ranks images by
 # NSS_diff and overlays Mooney fixations) with no Early/Late dimension, so it always
-# reads the whole-mode cross-phase results.
-STATS_PATH = Path("analysesresults/NSS_whole") / "NSS_crossphase_descriptives.pkl"  # cross-phase scores (ranking + DV)
-MAPS_PATH  = Path("analysesresults/NSS") / "FixMaps_full.pkl"                       # pre-blurred reference maps (shared)
-OUTPUT_DIR = Path("Figures/nss_separated_analyses/MooneysOnDisamb")
+# reads the whole-mode cross-phase results. Trial set and blink mode come from
+# Settings.py through NSSPaths, so the pickles read are the ones the run just built.
+_PATHS = NSSPaths.paths_for("whole", NSSPaths.ask_trial_set(), NSSPaths.ask_blink_mode())
+STATS_PATH = _PATHS["CROSS_PKL"]    # cross-phase scores (ranking + DV)
+MAPS_PATH  = _PATHS["FIXMAPS_PKL"]  # pre-blurred reference maps (shared across Mooney modes)
+OUTPUT_DIR = Path(f"Figures{DATASET_SUFFIX}/nss_separated_analyses/MooneysOnDisamb")
 
 # 3. Stimulus images. Machine-specific: edit these to run elsewhere.
 MOONEY_DIRS = [

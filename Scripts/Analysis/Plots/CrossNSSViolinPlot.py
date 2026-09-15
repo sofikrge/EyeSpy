@@ -7,9 +7,9 @@
 
 A whole-window figure with no Early/Late dimension, so it always reads the whole-mode
 results (the halves comparison has its own plot, CrossNSSHalvesLinePlot.py). It takes the
-trial set and blink mode from Settings.py and suffixes the output PNG to match, and it
-follows the dataset switch: under EYESPY_DATASET=rep it reads analysesresults_rep/ and
-writes to Figures_rep/ with a _rep suffix, so pilot and replication figures never mix.
+trial set and blink mode from Settings.py and suffixes the output PNG to match, and the
+DATASET toggle at the top picks pilot or replication: "data_rep" reads analysesresults_rep/
+and writes to Figures_rep/ with a _rep suffix, so pilot and replication figures never mix.
 The model EMM diamonds are hand-pasted from one specific lmer fit, so DRAW_EMMS is off
 by default.
 
@@ -24,13 +24,24 @@ import seaborn as sns
 from pathlib import Path
 
 # === CONFIG ===
+# Which dataset to plot, the same toggle CompleteRun.py has and for the same reason:
+# it has to be set before Settings is imported, so it sits above the imports below.
+#   "data"     the pilot in data/,           analysesresults/  -> Figures/
+#   "data_rep" the replication in data_rep/, analysesresults_rep/ -> Figures_rep/
+# setdefault, not assignment: an EYESPY_DATASET already in the environment (a one-off
+# `EYESPY_DATASET=rep python3 ...`, or a parent script) still wins, matching how the
+# trial set and blink mode treat their own env vars.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+
 # Toggle which sessions to plot:
 #   True  -> only the unconscious session (Unconscious Aware + Unconscious Unaware)
 #   False -> all three groups (Conscious Aware + both unconscious groups)
 UNCONSCIOUS_ONLY = True
 
-# Trial set and blink mode (prompts, or the $TRIAL_SET / $BLINK_MODE env vars) pick
-# which whole-mode results folder is read.
+# Trial set and blink mode come from Settings.py (or the $TRIAL_SET / $BLINK_MODE env
+# vars) and pick which whole-mode results folder is read.
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 from Scripts.Analysis.NSS import NSSPaths

@@ -71,7 +71,8 @@ for filename in files:
     # 4. FIX: Force Risky Columns to Float64
     # This prevents the "Int64 vs Float64" crash when merging participants 
     # who have data (Ints) vs those who have NaNs (Floats).
-    risky_cols = ["response_PAS_Q", "DidRespondPas", "NumRepetitionFixationFail", "BlockNum"]
+    risky_cols = ["response_PAS_Q", "DidRespondPas", "DidRespondPls",
+                  "NumRepetitionFixationFail", "BlockNum"]
     cast_exprs = [pl.col(c).cast(pl.Float64) for c in risky_cols if c in df.columns]
     
     if cast_exprs:

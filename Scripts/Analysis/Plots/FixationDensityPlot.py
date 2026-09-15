@@ -13,7 +13,7 @@ awareness-split, matching how NSS.py builds its reference maps. The two unconsci
 therefore show the same session-U data by design (labelled on each panel).
 
 Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
-Writes: Figures/nss_separated_analyses/FixationDensityPlot4.png
+Writes: Figures[_rep]/nss_separated_analyses/FixationDensityPlot4.png
 """
 
 import sys
@@ -31,9 +31,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, fo
 
 # Canvas, pixels-per-degree and blur radius come from Settings.py so this figure is
 # built on exactly the same geometry as the NSS calculation it illustrates.
-from Settings import FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD, SIGMA
+# Which dataset this figure is built from  (must be set before Settings is imported,
+# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
+# the parquet and results folder read, and the Figures[_rep]/ folder written.
+#   "data"     the pilot in data/            -> Figures/
+#   "data_rep" the replication in data_rep/  -> Figures_rep/
+# setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
 
-OUTPUT_DIR  = Path("Figures/nss_separated_analyses")
+from Settings import FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD, SIGMA, _SUFFIX as DATASET_SUFFIX
+
+OUTPUT_DIR  = Path(f"Figures{DATASET_SUFFIX}/nss_separated_analyses")
 OUTPUT_FILE = OUTPUT_DIR / "FixationDensityPlot4.png"
 
 COLORMAP    = "jet"

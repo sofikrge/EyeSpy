@@ -13,8 +13,8 @@ Both use the fixation locations already in the parquet ((0, 0) = image centre):
   variance = Var(x) + Var(y)      across a participant's fixations of that type
 
 Reads:  data/NSS_all_fixations_clean.parquet   (one row per fixation, NSSExporter.py)
-Writes: Figures/nss_analyses/FixationEccentricity_byAwareness.png
-        Figures/nss_analyses/FixationSpatialVariance_byAwareness.png
+Writes: Figures[_rep]/nss_analyses/FixationEccentricity_byAwareness.png
+        Figures[_rep]/nss_analyses/FixationSpatialVariance_byAwareness.png
 """
 
 import sys
@@ -24,9 +24,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
+# Which dataset this figure is built from  (must be set before Settings is imported,
+# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
+# the parquet and results folder read, and the Figures[_rep]/ folder written.
+#   "data"     the pilot in data/            -> Figures/
+#   "data_rep" the replication in data_rep/  -> Figures_rep/
+# setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
-from Settings import FIX_FILE as INPUT_FILE
-OUTPUT_DIR = Path("Figures/nss_analyses"); OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+from Settings import FIX_FILE as INPUT_FILE, _SUFFIX as DATASET_SUFFIX
+OUTPUT_DIR = Path(f"Figures{DATASET_SUFFIX}/nss_analyses"); OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GROUP_MAP = {
     "conscious_aware":    "Conscious Aware\n(PAS 2-3)",

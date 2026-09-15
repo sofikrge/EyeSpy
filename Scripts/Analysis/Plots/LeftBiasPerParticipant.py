@@ -24,7 +24,7 @@ Reading the result:
     mean up -> the effect is driven by those few (check n per participant too).
 
 Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
-Writes: Figures/nss_separated_analyses/LeftBiasPerParticipant.png
+Writes: Figures[_rep]/nss_separated_analyses/LeftBiasPerParticipant.png
 """
 
 import sys
@@ -40,10 +40,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, fo
 # =============================================================================
 
 # Same geometry as NSS.py and FixationDensityPlot.py, from the one config file.
-from Settings import (FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD,
-                      MIN_FIX_PER_PARTICIPANT)
+# Which dataset this figure is built from  (must be set before Settings is imported,
+# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
+# the parquet and results folder read, and the Figures[_rep]/ folder written.
+#   "data"     the pilot in data/            -> Figures/
+#   "data_rep" the replication in data_rep/  -> Figures_rep/
+# setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
 
-OUTPUT_DIR  = Path("Figures/nss_separated_analyses")
+from Settings import (FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD,
+                      MIN_FIX_PER_PARTICIPANT, _SUFFIX as DATASET_SUFFIX)
+
+OUTPUT_DIR  = Path(f"Figures{DATASET_SUFFIX}/nss_separated_analyses")
 OUTPUT_FILE = OUTPUT_DIR / "LeftBiasPerParticipant.png"
 
 # =============================================================================

@@ -36,41 +36,21 @@ _SUFFIX   = "_rep" if REP else ""
 
 DEBUG = True
 
-dataset_paths = pm.DatasetPaths(
-    root=f'{DATA_ROOT}/', 
-    raw='raw', 
-    preprocessed='preprocessed', 
-    events='events')
-
+# Screen geometry of the recording rig, in the units pymovements wants (cm).
+# Everything derived from it is built at the bottom of this file, after the
+# replication overrides, so Settings_rep.py can change it.
 SCREEN = { # adjust to your parameters
     "width_px": 1920, "height_px": 1080,
-    "width_cm": 53.2, "height_cm": 29.8,
+    "width_cm": 53.2, "height_cm": 29.8,   # pilot rig; the replication overrides this
     "distance_cm": 74.0,
     "origin": "upper left",
     "sampling_rate": 1000}
-
-experiment = pm.gaze.Experiment(
-    screen_width_px=SCREEN["width_px"], screen_height_px=SCREEN["height_px"],
-    screen_width_cm=SCREEN["width_cm"], screen_height_cm=SCREEN["height_cm"],
-    distance_cm=SCREEN["distance_cm"], origin=SCREEN["origin"],
-    sampling_rate=SCREEN["sampling_rate"])
 
 filename_format = {'gaze': r's_{session_id:s}_{participant_id:d}.asc'}
 filename_format_schema_overrides = {'gaze': {'session_id': str, 'participant_id': str}}
 
 time_column, time_unit = 'time', 'ms'
 pixel_columns = ['x_right', 'y_right', 'x_left', 'y_left']
-
-dataset_definition = pm.DatasetDefinition(
-    name="my_dataset",
-    has_files={"gaze": True, "precomputed_events": False, "precomputed_reading_measures": False},
-    experiment=experiment,
-    filename_format=filename_format,
-    filename_format_schema_overrides=filename_format_schema_overrides,
-    time_column=time_column, time_unit=time_unit,
-    pixel_columns=pixel_columns)
-
-dataset = pm.Dataset(definition=dataset_definition, path=dataset_paths)
 
 # Folders (each writer creates it on demand, so nothing is made just by importing)
 data_quality_folder = f'DataQualityChecks{_SUFFIX}/'
@@ -102,9 +82,8 @@ INTERPOLATE_BLINKS = True
 MAX_BLINK_INTERP_MS = 150   # longer gaps are track loss, left as gaps
 BLINK_MARGIN_MS = 200       # each blink is widened by this before interpolating
 
-IMAGE_SIZE_DEG = (9.99, 7.50)
+IMAGE_SIZE_DEG = (9.99, 7.50)   # pilot rig; the replication overrides this
 CENTER_RADIUS_DG = 1.5 #shaked's value
-HX, HY = IMAGE_SIZE_DEG[0] / 2, IMAGE_SIZE_DEG[1] / 2
 
 # Event markers
 TRIAL_LABELS = {
@@ -130,6 +109,7 @@ MAT_FIELD_MAP = {
     'BlockNum': 'BlockNum',
     'ImageName': 'ImageName',
     'did_answer_PAS_Q': 'DidRespondPas',
+    'did_answer_PLS_Q': 'DidRespondPls',
     'NumRepetitionFixationFail': 'NumRepetitionFixationFail',
     'response_PAS_Q': 'response_PAS_Q',
 }
@@ -191,8 +171,7 @@ NSS_DEBUG = True   # separate from Stage 1's DEBUG: prints per-image NSS diagnos
 # degree 0 at its centre. Inherited from the MATLAB implementation (REFERENCES.md).
 IMAGE_HEIGHT = 600
 IMAGE_WIDTH  = 800
-MASK_PPD     = 48.55            # pixels per visual degree
-SIGMA        = MASK_PPD / 2.0   # Gaussian blur radius for the fixation maps
+MASK_PPD     = 48.55            # pixels per visual degree (pilot rig; see Settings_rep.py)
 
 FIX_FILE = Path(f"{DATA_ROOT}/NSS_all_fixations_clean.parquet")   # written by NSSExporter.py
 ANALYSES_ROOT = f"analysesresults{_SUFFIX}"   # NSSPaths.py builds its NSS_* folders in here
@@ -219,3 +198,36 @@ MIN_FIX_PER_PARTICIPANT    = 20   # LeftBiasPerParticipant.py ignores thinner ce
 if REP:
     print("[Settings] EYESPY_DATASET=rep -> applying Settings_rep.py overrides")
     from Settings_rep import *  # noqa: F401,F403
+
+
+#%% ============================== DERIVED VALUES ================================
+# Built last, from the values above as the overrides left them. Nothing here is a
+# parameter: every line restates one of them, so overriding SCREEN, IMAGE_SIZE_DEG or
+# MASK_PPD in Settings_rep.py reaches the pymovements dataset, the image bounds and the
+# blur radius instead of being silently ignored.
+
+HX, HY = IMAGE_SIZE_DEG[0] / 2, IMAGE_SIZE_DEG[1] / 2   # image half-extent, degrees
+SIGMA  = MASK_PPD / 2.0                                 # fixation-map blur radius, 0.5 deg
+
+dataset_paths = pm.DatasetPaths(
+    root=f'{DATA_ROOT}/',
+    raw='raw',
+    preprocessed='preprocessed',
+    events='events')
+
+experiment = pm.gaze.Experiment(
+    screen_width_px=SCREEN["width_px"], screen_height_px=SCREEN["height_px"],
+    screen_width_cm=SCREEN["width_cm"], screen_height_cm=SCREEN["height_cm"],
+    distance_cm=SCREEN["distance_cm"], origin=SCREEN["origin"],
+    sampling_rate=SCREEN["sampling_rate"])
+
+dataset_definition = pm.DatasetDefinition(
+    name="my_dataset",
+    has_files={"gaze": True, "precomputed_events": False, "precomputed_reading_measures": False},
+    experiment=experiment,
+    filename_format=filename_format,
+    filename_format_schema_overrides=filename_format_schema_overrides,
+    time_column=time_column, time_unit=time_unit,
+    pixel_columns=pixel_columns)
+
+dataset = pm.Dataset(definition=dataset_definition, path=dataset_paths)

@@ -145,7 +145,8 @@ def assign_trial_metadata_and_phases(dataset, raw_data_dir, behavioural_dir, eve
             "block_type", "BlockNum", "trial_number", "condition", "phase",
             # mooney_start / mooney_end are the MSG-marker phase boundaries
             "mooney_start", "mooney_end",
-            "ImageName", "DidRespondPas", "NumRepetitionFixationFail", "response_PAS_Q"
+            "ImageName", "DidRespondPas", "DidRespondPls",
+            "NumRepetitionFixationFail", "response_PAS_Q"
         ]
         missing_cols = {col: pl.lit(None) for col in desired_cols if col not in ev_df.columns}
         if missing_cols:
@@ -251,9 +252,16 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
                 (pl.col("block_type") == pair[0]) & (pl.col("BlockNum") == pair[1])
             )
 
+        # Preregistration exclusion (c): trials with no answer to the PAS *or* the
+        # pleasantness question. The pilot never recorded pleasantness, so its column
+        # is all-null and the rule is skipped there rather than dropping every trial.
+        pls_answered = ev.frame["DidRespondPls"].null_count() < ev.frame.height
+        pls_mask = (pl.col("DidRespondPls").fill_null(0) != 0) if pls_answered else pl.lit(True)
+
         final_mask = (
             ~pre_break_mask &
             (pl.col("DidRespondPas").fill_null(0) != 0) &
+            pls_mask &
             (pl.col("phase") != "inter_stimulus") &
             (pl.col("block_type") != "Practice") &
             pas_mask &
@@ -274,7 +282,8 @@ def apply_behavioral_filters_and_save(dataset, output_dir,
         save_path = os.path.join(output_dir, f"s_{s_id}_{p_id}.csv")
         save_df.write_csv(save_path)
 
-        risky_cols = ["response_PAS_Q", "DidRespondPas", "NumRepetitionFixationFail", "BlockNum"]
+        risky_cols = ["response_PAS_Q", "DidRespondPas", "DidRespondPls",
+                      "NumRepetitionFixationFail", "BlockNum"]
         tagged = ev.frame.with_columns(
             session_id=pl.lit(s_id), participant_id=pl.lit(p_id)
         )

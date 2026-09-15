@@ -14,7 +14,7 @@ No data file is read: the EMMs are pasted in below by hand from the fitted lmer 
 Note the export now calls that between-trial split `Experiment_Third` and gives it
 three levels; the EMMs below are from the earlier two-level median split.
 
-Writes: Figures/nss_separated_analyses/CrossNSSHalvesLinePlot.png
+Writes: Figures[_rep]/nss_separated_analyses/CrossNSSHalvesLinePlot.png
 """
 
 from pathlib import Path
@@ -30,8 +30,24 @@ def darken(color, factor=0.55):
     return (r * factor, g * factor, b * factor)
 
 # === CONFIG ===
+# Which dataset this figure is built from  (must be set before Settings is imported,
+# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
+# the parquet and results folder read, and the Figures[_rep]/ folder written.
+#   "data"     the pilot in data/            -> Figures/
+#   "data_rep" the replication in data_rep/  -> Figures_rep/
+# setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
+from Settings import _SUFFIX as DATASET_SUFFIX
+
 # Relative to the project root, like every other plot script (run them from there).
-OUT = Path("Figures/nss_separated_analyses/CrossNSSHalvesLinePlot.png")
+# The EMMs below are pasted from one fitted model, so repaste them when switching
+# dataset: the toggle moves the figure, it cannot move the numbers.
+OUT = Path(f"Figures{DATASET_SUFFIX}/nss_separated_analyses/CrossNSSHalvesLinePlot.png")
 
 AWARENESS_ORDER = ["conscious_aware", "unconscious_aware", "unconscious_unaware"]
 HALVES = ["First_Half", "Second_Half"]
