@@ -15,7 +15,7 @@ each split by awareness and intact vs scrambled:
   TABLE 2: Scored Post-Intact Mooney fixations
       The DV: each Mooney fixation read off both reference maps. "Intact"/"Scrambled"
       = which reference it was scored against. Driven by the results pickle so every
-      NSS.py drop rule (MIN_SUBJ_PER_IMAGE_CROSS, participant x trial unit, permissive
+      NSS.py drop rule (MIN_VIEWINGS_PER_IMAGE_CROSS, participant x trial unit, permissive
       NaN policy) is honored. A fixation scored against both references is counted in
       both columns; the distinct total is printed above the table.
 

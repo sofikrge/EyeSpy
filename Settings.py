@@ -70,13 +70,17 @@ EVENTS_CLEANED_DIR = os.path.join(DATA_ROOT, 'events_cleaned')
 FIX_VELOCITY_THRESHOLD = 30.0  # degrees per second
 MIN_FIX_DURATION_MS = 50      # minimum fixation length
 
+# Buffers for the blink-drop path below (INTERPOLATE_BLINKS = False) only. These are
+# not the preregistered 200 ms: that is BLINK_MARGIN_MS, on the interpolation path.
 BUFFER_FIX = 51   # 51ms for fixations
 BUFFER_SAC = 60   # 50ms + 10ms for saccades
 
 # --- Blink handling: two mutually exclusive modes
-#   False -> drop events overlapping a blink (the primary, preregistered method)
-#   True  -> PCHIP-interpolate position across short blinks before event detection,
-#            so a blink-spanning fixation survives as one fixation
+#   True  -> PCHIP-interpolate position across short blinks before event detection, so a
+#            blink-spanning fixation survives as one fixation. This is the preregistered
+#            method and what both datasets are run with.
+#   False -> drop events overlapping a blink instead, using the buffers above. The older
+#            method, kept as a robustness check; it is NOT the registered one.
 # Rationale and sources for all three values: REFERENCES.md.
 INTERPOLATE_BLINKS = True
 MAX_BLINK_INTERP_MS = 150   # longer gaps are track loss, left as gaps
@@ -178,7 +182,9 @@ ANALYSES_ROOT = f"analysesresults{_SUFFIX}"   # NSSPaths.py builds its NSS_* fol
 
 # How much data an image needs before it is scored at all.
 MIN_SUBJ_PER_IMAGE_NSS    = 2    # within-phase: minimum subjects per image
-MIN_SUBJ_PER_IMAGE_CROSS  = 2    # cross-phase: minimum Mooney subjects per image
+# Counts VIEWINGS, not people: one participant who saw an image in both the Experiment
+# and the Extra block already satisfies a threshold of 2.
+MIN_VIEWINGS_PER_IMAGE_CROSS = 2  # cross-phase: minimum Mooney viewings per image
 MIN_IMAGES_PER_CELL_CROSS = 15   # cross-phase: minimum valid scores per participant cell
 
 # Missing reference maps: "permissive" averages whatever is present,

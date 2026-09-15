@@ -67,8 +67,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # project root, for th
 from Settings import (RAW_DATA_DIR, BEHAVIOURAL_DIR, EVENTS_CLEANED_DIR, FIX_FILE,
                       data_quality_folder, SECTION_TO_BLOCK, TRIAL_SET, MOONEY_SPLIT,
                       INTERPOLATE_BLINKS, EXCLUDE_SUBJECTS, EXCLUDE_SESSIONS, EXCLUDE_BLOCKS,
+                      N_EXPERIMENT_BLOCKS,
                       VALIDATION_ACCURACY_AVG_THRESHOLD, VALIDATION_ACCURACY_MAX_THRESHOLD,
-                      MIN_SUBJ_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS)
+                      MIN_VIEWINGS_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS)
 from Scripts.Analysis.NSS.NSSPaths import TRIAL_SET_SUFFIX, BLINK_SUFFIX
 
 # The results folder for the modes in Settings.py. Built from NSSPaths' own suffix maps
@@ -157,7 +158,7 @@ THIN_FIX   = f"under {MIN_VIEWINGS} viewings survived Stage 1"
 NO_BLOCKS  = "no trials left after block exclusions"
 NO_PAS     = "no trials with this PAS response"
 ALL_UNUSED = "every trial of this PAS unanswered or repeated"
-NO_IMAGE   = f"no image reached {MIN_SUBJ_PER_IMAGE_CROSS} subjects"
+NO_IMAGE   = f"no image reached {MIN_VIEWINGS_PER_IMAGE_CROSS} viewings"
 THIN_CELL  = f"under {MIN_IMAGES_PER_CELL_CROSS} valid scores"
 REASONS = {
     INCLUDED:                     "#a8dda8",  # green
@@ -214,14 +215,28 @@ def read_trials(mat_path):
         if block not in WANTED_BLOCKS or not hasattr(expdata, section):
             continue
         struct = getattr(expdata, section)
+        section_trials = []
         for trial in (struct if isinstance(struct, np.ndarray) else [struct]):
             if field(trial, "TrialNum") is None:      # ghost trial: an empty placeholder row
                 continue
-            trials.append({k: field(trial, src) for k, src in
-                           [("block", "BlockNum"), ("pas", "response_PAS_Q"),
-                            ("answered", "did_answer_PAS_Q"),
-                            ("fixfail", "NumRepetitionFixationFail"),
-                            ("intact", "IsIntactDisambiguation")]})
+            row = {k: field(trial, src) for k, src in
+                   [("block", "BlockNum"), ("pas", "response_PAS_Q"),
+                    ("answered", "did_answer_PAS_Q"),
+                    ("answered_pls", "did_answer_PLS_Q"),
+                    ("fixfail", "NumRepetitionFixationFail"),
+                    ("intact", "IsIntactDisambiguation")]}
+            row["block_type"] = block
+            row["pre_break"] = False
+            section_trials.append(row)
+
+        # Preregistration exclusion (b) drops the trial BEFORE a broken fixation, not the
+        # flagged one. Within a section the rows are in trial order, so the trial before is
+        # simply the previous row - the same (block_type, trial_number - 1) the pipeline
+        # uses. A failure on a section's first trial has no predecessor and drops nothing.
+        for i, row in enumerate(section_trials):
+            if (row["fixfail"] or 0) > 0 and i > 0:
+                section_trials[i - 1]["pre_break"] = True
+        trials.extend(section_trials)
 
     # Without the intact flag every trial would look scrambled and every cell would be
     # reported as too thin, which reads like a result rather than a missing field.
@@ -280,17 +295,23 @@ def valid_trials(pid, sess, trials):
     the responses the analysis discards stay visible next to the ones it keeps.
 
     The valid counts apply exactly the filters apply_behavioral_filters_and_save applies:
-    the participant's excluded blocks, PAS 1 dropped, an unanswered PAS dropped, a null PAS
-    dropped (polars' is_in propagates the null, so those rows are filtered out there too),
-    and any trial repeated for failing fixation.
+    the participant's excluded blocks, PAS 1 dropped, an unanswered PAS or pleasantness
+    answer dropped, a null PAS dropped (polars' is_in propagates the null, so those rows
+    are filtered out there too), and the trial before a broken fixation.
     """
-    bad_blocks = EXCL_BLOCK.get(pid, {}).get(sess, [])
+    # EXCLUDE_BLOCKS numbers are the session's running order (1-4 Experiment, then the
+    # Extra blocks), while BlockNum restarts at 1 in the Extra block. Translate to the
+    # (block_type, BlockNum) pair each number names, exactly as the pipeline does, or a
+    # bare number would match one block of each type.
+    bad_blocks = {(("Experiment", n) if n <= N_EXPERIMENT_BLOCKS
+                   else ("Extra", n - N_EXPERIMENT_BLOCKS))
+                  for n in EXCL_BLOCK.get(pid, {}).get(sess, [])}
     prefix = "conscious" if sess == "C" else "unconscious"
 
     cells = {f"{prefix}_aware": (0, 0), f"{prefix}_unaware": (0, 0)}
     pas_counts = Counter()
     for t in trials:
-        if t["block"] in bad_blocks:
+        if (t["block_type"], t["block"]) in bad_blocks:
             continue
         pas = t["pas"]
         # A PAS the .mat left empty reaches polars as a null, and its is_in mask filters
@@ -300,7 +321,10 @@ def valid_trials(pid, sess, trials):
         # is dropped a line later anyway.
         missing = pas is None or (isinstance(pas, float) and np.isnan(pas))
         pas_counts["na" if missing else int(pas)] += 1
-        if (pas is None or pas == 1 or not t["answered"] or (t["fixfail"] or 0) > 0):
+        # The pilot never recorded pleasantness, so a None there is "not asked", not
+        # "not answered" - the pipeline skips the rule on that dataset for the same reason.
+        pls_unanswered = t["answered_pls"] is not None and not t["answered_pls"]
+        if (pas is None or pas == 1 or not t["answered"] or pls_unanswered or t["pre_break"]):
             continue
         awareness = f"{prefix}_{'unaware' if pas == 0 else 'aware'}"
         total, intact = cells[awareness]

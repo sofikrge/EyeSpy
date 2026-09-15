@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, fo
 #                "halves" -> score each 1.5 s half (Early/Late) against the same refs
 from Settings import (
     FIX_FILE, IMAGE_HEIGHT, IMAGE_WIDTH, MASK_PPD, SIGMA,
-    MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS,
+    MIN_SUBJ_PER_IMAGE_NSS, MIN_VIEWINGS_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS,
     NAN_POLICY_CROSS, DISPERSION_DDOF,
     NSS_DEBUG as DEBUG,
 )
@@ -445,7 +445,7 @@ def _aggregate_by_policy(subj_scores: list[float], policy: str) -> float:
 def calculate_NSS_crossphase(
     FixMaps,fixations_df: pd.DataFrame,pixels_per_vdegree: float,
     *,image_height: int = IMAGE_HEIGHT,image_width: int = IMAGE_WIDTH,
-    nan_policy: str = "permissive", min_subj_per_image_cross: int = 2,
+    nan_policy: str = "permissive", min_viewings_per_image_cross: int = 2,
     mooney_split: str = "whole"):
     """
     For each Mooney image x condition, compute NSS of Mooney fixations
@@ -535,9 +535,9 @@ def calculate_NSS_crossphase(
             coords_list, unit_keys = _coords_in_fixmaps_order(
                 df_group, pixels_per_vdegree, H, W, return_keys=True)
             participant_ids = [f"{pid}_t{trial}" for pid, trial in unit_keys]
-            n_subj = len(coords_list)
+            n_subj = len(coords_list)   # (participant, trial) units, i.e. viewings
 
-            if n_subj < int(min_subj_per_image_cross): # if subj count too low, add nan placeholder
+            if n_subj < int(min_viewings_per_image_cross): # too few viewings, add nan placeholder
                 Results["image"].append({
                     "img": img, "condition": cond, "image_type": "mooney",
                     "subject": [],
@@ -741,7 +741,7 @@ if __name__ == "__main__":
     cross_meta  = _meta_block(ppd, IMAGE_HEIGHT, IMAGE_WIDTH, ("ImageName","condition"),
                           tag="calculate_NSS_crossphase:v3_mooney_split",  # <- Changed version tag
                           extra={"nan_policy": str(NAN_POLICY_CROSS),
-                                 "min_subj_per_image_cross": int(MIN_SUBJ_PER_IMAGE_CROSS),
+                                 "min_viewings_per_image_cross": int(MIN_VIEWINGS_PER_IMAGE_CROSS),
                                  "mooney_split": str(MOONEY_SPLIT),
                                  "trial_set": str(TRIAL_SET),
                                  "blink_mode": str(BLINK_MODE),
@@ -763,7 +763,7 @@ if __name__ == "__main__":
             pixels_per_vdegree=ppd,
             image_height=IMAGE_HEIGHT,image_width=IMAGE_WIDTH,
             nan_policy=str(NAN_POLICY_CROSS),
-            min_subj_per_image_cross=int(MIN_SUBJ_PER_IMAGE_CROSS),
+            min_viewings_per_image_cross=int(MIN_VIEWINGS_PER_IMAGE_CROSS),
             mooney_split=str(MOONEY_SPLIT))
         # save results + cache
         with open(cross_cache_path, "wb") as f:

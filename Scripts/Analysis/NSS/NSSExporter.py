@@ -2,7 +2,7 @@
 
 Concatenates every s_<session>_<participant>.csv, keeps the fixations, and classifies
 each one by experimental phase and condition into the image_type the NSS analysis works
-in (mooney_post_intact / mooney_post_not_intact / disamb_intact / disamb_not_intact).
+in (mooney_post_intact / mooney_post_scrambled / disamb_intact / disamb_not_intact).
 Fixations that fall in no valid class are dropped.
 
 Two derived columns are added here rather than in NSS.py, because both need the phase

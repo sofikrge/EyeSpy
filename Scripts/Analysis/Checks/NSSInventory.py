@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, fo
 from Scripts.Analysis.NSS import NSSPaths
 _P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
-from Settings import FIX_FILE, MIN_SUBJ_PER_IMAGE_NSS, MIN_SUBJ_PER_IMAGE_CROSS
+from Settings import FIX_FILE, MIN_SUBJ_PER_IMAGE_NSS, MIN_VIEWINGS_PER_IMAGE_CROSS
 
 NSS_DIR = _P["SHARED_DIR"]   # FixMaps + within-phase (mode-independent)
 

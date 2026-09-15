@@ -6,7 +6,7 @@ at all" to "did the drop rules remove it":
   1. How many mooney_post_intact + unconscious_unaware fixations does this
      participant have in the parquet? (cross-phase only scores post-intact Mooneys)
   2. For each of those images, how many *other* UU participants also appear?
-     Images where this is 0 get dropped by MIN_SUBJ_PER_IMAGE_CROSS.
+     Images where this is 0 get dropped by MIN_VIEWINGS_PER_IMAGE_CROSS.
   3. Which images did the participant actually get scored on?
 
 Reads:  data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
@@ -20,7 +20,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 from Scripts.Analysis.NSS import NSSPaths
-from Settings import FIX_FILE, MIN_SUBJ_PER_IMAGE_CROSS as MIN_SUBJ_PER_IMAGE
+from Settings import FIX_FILE, MIN_VIEWINGS_PER_IMAGE_CROSS as MIN_VIEWINGS_PER_IMAGE
 _P = NSSPaths.select()  # prompt or $MOONEY_SPLIT -> per-mode folder
 
 # --- CONFIG
@@ -62,7 +62,7 @@ else:
 # --- CHECK 2: Co-participant coverage per image
 print(f"\n{SEP}")
 print(f"CHECK 2 - other {TARGET_AWARENESS} participants per image")
-print(f"          (images with 0 others fail the MIN_SUBJ={MIN_SUBJ_PER_IMAGE} threshold -> dropped)")
+print(f"          (images with 0 others fail the MIN_VIEWINGS={MIN_VIEWINGS_PER_IMAGE} threshold -> dropped)")
 print(SEP)
 
 all_uua = fix[
@@ -79,7 +79,7 @@ else:
             (all_uua["ImageName"] == img) &
             (all_uua["participant"].astype(str) != PARTICIPANT_ID)
         ]["participant"].nunique()
-        will_be_scored = others >= (MIN_SUBJ_PER_IMAGE - 1)  # need >=1 other (total >=2)
+        will_be_scored = others >= (MIN_VIEWINGS_PER_IMAGE - 1)  # need >=1 other (total >=2)
         rows.append({
             "ImageName":    img,
             "n_others":     others,
@@ -87,7 +87,7 @@ else:
         })
 
     df_cov = pd.DataFrame(rows).sort_values("n_others")
-    n_pass = (df_cov["n_others"] >= MIN_SUBJ_PER_IMAGE - 1).sum()
+    n_pass = (df_cov["n_others"] >= MIN_VIEWINGS_PER_IMAGE - 1).sum()
     n_fail = len(df_cov) - n_pass
 
     print(f"  {n_pass}/{len(df_cov)} images pass the threshold, {n_fail} are dropped.\n")

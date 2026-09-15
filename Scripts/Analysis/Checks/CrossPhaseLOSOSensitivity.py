@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root
-from Settings import FIX_FILE, MASK_PPD, SIGMA, IMAGE_HEIGHT, IMAGE_WIDTH, MIN_SUBJ_PER_IMAGE_CROSS
+from Settings import FIX_FILE, MASK_PPD, SIGMA, IMAGE_HEIGHT, IMAGE_WIDTH, MIN_VIEWINGS_PER_IMAGE_CROSS
 from Scripts.Analysis.NSS import NSSPaths
 import Scripts.Analysis.NSS.NSS as N
 
@@ -75,7 +75,7 @@ def main():
         df_group = df_group[df_group["awareness"] == awareness]
         coords, keys = N._coords_in_fixmaps_order(
             df_group, MASK_PPD, IMAGE_HEIGHT, IMAGE_WIDTH, return_keys=True)
-        if len(coords) < int(MIN_SUBJ_PER_IMAGE_CROSS):
+        if len(coords) < int(MIN_VIEWINGS_PER_IMAGE_CROSS):
             continue
 
         refs = {"Intact": fm_index.get((img, session, "disamb_intact")),
