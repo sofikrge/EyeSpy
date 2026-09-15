@@ -29,7 +29,7 @@ IMAGE_SIZE_DEG = (10.00, 7.51)                 # stimulus extent, visual degrees
 
 # Exclusions, defined here even while empty: without them the replication run would
 # inherit the pilot's participant numbers from Settings.py. Fill in as they are decided.
-EXCLUDE_SUBJECTS = [103, 109, 120,     # not enough PAS 0 trials
+EXCLUDE_SUBJECTS = [103, 109, 120,     # not enough PAS 0 trials, for 109 Talya also turned on light mid block IDK when exactly
 ]
 
 # Whole sessions, format: { ParticipantID: ['SessionLetter'] }
@@ -40,9 +40,8 @@ EXCLUDE_SESSIONS = {
 # Single blocks, format: { ParticipantID: { 'SessionLetter': [BlockNums] } }
 # Numbers are the session's running order: 1-4 Experiment, 5-8 Extra (5 = Extra 1).
 EXCLUDE_BLOCKS = {106: {'U': [3, 5]}, # moved camera mid block
-                  107: {'U': [7]}, # pupil lost mid block
-                  109: {'U': [2]}, # Talya accidentally turned on light and then turned off again, IDK when exactly
-                  118: {'U': [3]}, # Pupil lost mid block, so redid C&V
+#                  107: {'U': [7]}, # pupil lost mid block
+#                  118: {'U': [3]}, # Pupil lost mid block, so redid C&V
                   123: {'U': [1, 2]}, # told me he saw images outside of the frame so i think he was unfocusing his eyes, told him not to do it afterwards
                   126: {'U': [5]}, # stopped mid block
                   127: {'U': [1, 2, 8]}, # fell asleep in these blocks

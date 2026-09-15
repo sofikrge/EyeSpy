@@ -46,7 +46,7 @@ Reads:  <data>/raw/s_<SESSION>_<PID>.asc                          (blinks, calib
         data/NSS_all_fixations_clean.parquet                      (NSSExporter.py)
         analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl (NSS.py)
         analysesresults/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
-Writes: Figures/DataDiagnosis.png                                  (or --out)
+Writes: Figures[_rep]/DataDiagnosis.png                             (or --out)
 """
 
 #%% Imports and configuration
@@ -69,7 +69,8 @@ from Settings import (RAW_DATA_DIR, BEHAVIOURAL_DIR, EVENTS_CLEANED_DIR, FIX_FIL
                       INTERPOLATE_BLINKS, EXCLUDE_SUBJECTS, EXCLUDE_SESSIONS, EXCLUDE_BLOCKS,
                       N_EXPERIMENT_BLOCKS,
                       VALIDATION_ACCURACY_AVG_THRESHOLD, VALIDATION_ACCURACY_MAX_THRESHOLD,
-                      MIN_VIEWINGS_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS)
+                      MIN_VIEWINGS_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS,
+                      _SUFFIX as DATASET_SUFFIX)
 from Scripts.Analysis.NSS.NSSPaths import TRIAL_SET_SUFFIX, BLINK_SUFFIX
 
 # The results folder for the modes in Settings.py. Built from NSSPaths' own suffix maps
@@ -107,7 +108,10 @@ def parse_args():
     add("--behavioural", metavar="DIR", help="the .mat files, if they are not in <data>/behavioural")
     add("--parquet", metavar="FILE", help=f"fixations parquet, for the exact verdict (default: {FIX_FILE})")
     add("--results", metavar="DIR", help=f"NSS results folder, for the exact verdict (default: {DEFAULT_CROSS})")
-    add("--out", metavar="FILE", default="Figures/DataDiagnosis.png", help="figure to write (default: %(default)s)")
+    # Follows the dataset switch, like the plotting scripts: a data_rep run writes to
+    # Figures_rep/ so it cannot overwrite the pilot's figure (and vice versa).
+    add("--out", metavar="FILE", default=f"Figures{DATASET_SUFFIX}/DataDiagnosis.png",
+        help="figure to write (default: %(default)s)")
     add("--no-exclusions", action="store_true", default=not APPLY_EXCLUSIONS,
         help="ignore Settings.py's EXCLUDE_* lists, which name one dataset's participants "
              f"(default: {not APPLY_EXCLUSIONS}, from APPLY_EXCLUSIONS above)")
