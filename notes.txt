@@ -1,3 +1,5 @@
 for participant 18, the experiment crashed after the 1st extra block, so I just used their last ongoing data set and copied it to the behavioural folder
 
 changed alpha to 0.15 from 0.06 from participant 28 on
+
+changed alpha to 0.18 on the 20th from participant 32 on

@@ -6,8 +6,13 @@ the analysis no matter how clean its gaze data is. Each bar is 100% of one sessi
 answers, split by response, so an unusable session is visible while data is still being
 collected. Reads the behavioural files only; nothing else in the pipeline has to have run.
 
+A second figure pools the same answers over participants entirely - one pie per question
+per session letter - for the "how did people answer overall" number that the per-session
+bars cannot be read off by eye.
+
 Reads:  <behavioural>/expdata_<SESSION>_<PID>.mat   (the Experiment and Extra trials)
 Writes: Figures[_rep]/ResponseDistributions.png
+        Figures[_rep]/ResponseDistributionsPooled.png
 """
 
 import sys
@@ -34,6 +39,7 @@ from Settings import BEHAVIOURAL_DIR, SECTION_TO_BLOCK, FILTER_PALETTE, _SUFFIX 
 BEH_DIR = Path(BEHAVIOURAL_DIR)                     # follows the DATASET toggle above
 SECTIONS = [s for s in SECTION_TO_BLOCK if s != "Trials_Practice"]  # practice never counts
 OUT_PNG = Path(f"Figures{DATASET_SUFFIX}/ResponseDistributions.png")
+OUT_PIE_PNG = Path(f"Figures{DATASET_SUFFIX}/ResponseDistributionsPooled.png")
 
 # One panel per question the dataset actually recorded: the .mat field, its responses in
 # scale order, and their labels.
@@ -160,6 +166,59 @@ def print_both_cells_met(sessions, counts):
     print(f"at least {PAS_0_THRESHOLD}% {cells}: {met}/{len(sessions)} sessions")
 
 
+def plot_pie(ax, title, counts, levels, labels):
+    """One pie of every answer pooled over the sessions behind `counts`.
+
+    Pooled, not averaged over sessions, for the same reason as print_cell_shares: a session
+    cut short should weigh less than a full one. Unanswered trials keep their slice so the
+    pie is the same 100% as a bar above, and a level nobody chose is left out rather than
+    drawn as a zero-width wedge with a label on top of its neighbour.
+    """
+    pooled = Counter()
+    for c in counts:
+        pooled.update(c)
+    segments = [(level, label, colour) for level, label, colour
+                in list(zip(levels, labels, FILTER_PALETTE)) + [(NO_ANSWER, NO_ANSWER, NO_ANSWER_COLOUR)]
+                if pooled[level]]
+    total = sum(pooled[level] for level, _, _ in segments)
+    if not total:
+        ax.set_axis_off()
+        return
+
+    # The share goes in the legend rather than beside its wedge: a 0.4% level (the rare
+    # answers are exactly the ones worth reading) would otherwise write over its neighbour.
+    wedges, _ = ax.pie([pooled[level] for level, _, _ in segments],
+                       colors=[colour for _, _, colour in segments],
+                       startangle=90, counterclock=False,
+                       wedgeprops={"edgecolor": "white", "linewidth": 0.5})
+    ax.legend(wedges,
+              [f"{label}   {pooled[level]}  ({100 * pooled[level] / total:.1f}%)"
+               for level, label, _ in segments],
+              bbox_to_anchor=(0.5, 0.0), loc="upper center", frameon=False, fontsize=8)
+    ax.set_title(f"{title}   (n = {total} trials)", fontsize=9)
+
+
+def save_pooled_pies(sessions, asked):
+    """The pie figure: a row per question, a column per session letter.
+
+    C and U are the same participants viewing under different conditions, so the letters
+    stay apart here too - a single pie over both would describe neither, and the PAS split
+    is exactly what differs between them.
+    """
+    letters = sorted({session[-1] for session in sessions})
+    fig, axes = plt.subplots(len(asked), len(letters), squeeze=False, layout="constrained",
+                             figsize=(4.5 * len(letters), 5.0 * len(asked)))
+    for row, (title, counts, levels, labels) in zip(axes, asked):
+        for ax, letter in zip(row, letters):
+            of_letter = [c for session, c in zip(sessions, counts) if session[-1] == letter]
+            plot_pie(ax, f"{title}  -  {letter} sessions", of_letter, levels, labels)
+
+    fig.suptitle(f"Response distribution pooled over participants  -  {BEH_DIR}", fontsize=11)
+    OUT_PIE_PNG.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT_PIE_PNG, dpi=150, bbox_inches="tight")
+    print(f"Saved {OUT_PIE_PNG}")
+
+
 files = sorted(BEH_DIR.glob("expdata_*.mat"))
 if not files:
     raise SystemExit(f"no expdata_<SESSION>_<PID>.mat files under {BEH_DIR.resolve()}")
@@ -189,3 +248,5 @@ fig.tight_layout()
 OUT_PNG.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(OUT_PNG, dpi=150, bbox_inches="tight")
 print(f"Saved {OUT_PNG}  ({len(files)} sessions)")
+
+save_pooled_pies(sessions, asked)

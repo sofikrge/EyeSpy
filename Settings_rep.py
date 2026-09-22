@@ -29,7 +29,7 @@ IMAGE_SIZE_DEG = (10.00, 7.51)                 # stimulus extent, visual degrees
 
 # Exclusions, defined here even while empty: without them the replication run would
 # inherit the pilot's participant numbers from Settings.py. Fill in as they are decided.
-EXCLUDE_SUBJECTS = [103, 109, 120,     # not enough PAS 0 trials, for 109 Talya also turned on light mid block IDK when exactly
+EXCLUDE_SUBJECTS = [103, 109, 120, 132    # not enough PAS 0 trials, for 109 Talya also turned on light mid block IDK when exactly
 ]
 
 # Whole sessions, format: { ParticipantID: ['SessionLetter'] }
