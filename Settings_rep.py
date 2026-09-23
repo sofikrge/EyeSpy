@@ -46,6 +46,7 @@ EXCLUDE_BLOCKS = {106: {'U': [3, 5]}, # moved camera mid block
                   126: {'U': [5]}, # stopped mid block
                   127: {'U': [1, 2, 8]}, # fell asleep in these blocks
                   129: {'U': [2]}, # eyes closing a lot so perhaps too tired
+                  134:  {'U': [1]}, # had hands on wrong buttons
                   
 
 }
