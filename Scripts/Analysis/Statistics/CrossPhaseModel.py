@@ -27,8 +27,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 os.chdir(PROJECT_ROOT)
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Dataset toggle. Set before Settings is imported, exactly as CompleteRun.py does it,
-# because Settings reads this variable at import time. setdefault, not assignment, so a
+# Dataset toggle. Set before Settings is imported, because Settings reads
+# EYESPY_DATASET at import time and would otherwise ask. setdefault, not assignment, so a
 # one-off `EYESPY_DATASET=rep python3 ...` still wins.
 #   "data_pilot" the pilot set in Data.nosync/pilot/,   Settings.py + Settings_pilot.py on top
 #   "data_rep"   the replication set in Data.nosync/rep/, Settings.py + Settings_rep.py on top

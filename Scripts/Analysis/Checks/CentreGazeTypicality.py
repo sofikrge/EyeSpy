@@ -10,8 +10,8 @@ The result goes in a new `GazeTypicalityCentred` column; the original
 `Within-NSS-Typicality` is left untouched so raw and centred models can be
 compared. In Jamovi, use the centred column with covariate scaling set to None.
 
-Reads:  Analysis_Results/NSS_<mode>/NSS_CrossPhase_LongFormat.csv          (NSS.py)
-Writes: Analysis_Results/NSS_<mode>/NSS_CrossPhase_LongFormat_centred.csv
+Reads:  Analysis_Results/<dataset>/NSS_<mode>/NSS_CrossPhase_LongFormat.csv  (NSS.py)
+Writes: Analysis_Results/<dataset>/NSS_<mode>/NSS_CrossPhase_LongFormat_centred.csv
 """
 
 import sys

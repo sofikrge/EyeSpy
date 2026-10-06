@@ -14,7 +14,7 @@ The model EMM diamonds are hand-pasted from one specific lmer fit, so DRAW_EMMS 
 by default.
 
 Reads:  Analysis_Results/<dataset>/NSS_whole[_suffix]/NSS_CrossPhase_LongFormat.csv   (NSS.py)
-Writes: Figures[_rep]/nss_analyses/NSS_CrossPhase_Violin_byAwareness*.png
+Writes: Figures/<dataset>/nss_analyses/NSS_CrossPhase_Violin_byAwareness*.png
 """
 
 import pandas as pd
@@ -24,8 +24,8 @@ import seaborn as sns
 from pathlib import Path
 
 # === CONFIG ===
-# Which dataset to plot, the same toggle CompleteRun.py has and for the same reason:
-# it has to be set before Settings is imported, so it sits above the imports below.
+# Which dataset to plot. It has to be set before Settings is imported (Settings reads
+# EYESPY_DATASET on import and would otherwise ask), so it sits above the imports below.
 #   "data_pilot" the pilot in Data.nosync/pilot/,   Analysis_Results/pilot/ -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/, Analysis_Results/rep/ -> Figures/rep/
 # setdefault, not assignment: an EYESPY_DATASET already in the environment (a one-off

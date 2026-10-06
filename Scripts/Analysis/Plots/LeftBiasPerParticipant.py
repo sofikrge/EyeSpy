@@ -23,8 +23,8 @@ Reading the result:
   - If most cluster around 50% and a few extreme participants pull the pooled
     mean up -> the effect is driven by those few (check n per participant too).
 
-Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
-Writes: Figures[_rep]/nss_separated_analyses/LeftBiasPerParticipant.png
+Reads:  Data.nosync/<dataset>/NSS_all_fixations_clean.parquet  (NSSExporter.py)
+Writes: Figures/<dataset>/nss_separated_analyses/LeftBiasPerParticipant.png
 """
 
 import sys
@@ -41,8 +41,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, fo
 
 # Same geometry as NSS.py and FixationDensityPlot.py, from the one config file.
 # Which dataset this figure is built from  (must be set before Settings is imported,
-# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
-# the parquet and results folder read, and the Figures[_rep]/ folder written.
+# because Settings reads EYESPY_DATASET on import and would otherwise ask). Everything
+# follows from it: the parquet and results folder read, and the Figures/ subfolder written.
 #   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.

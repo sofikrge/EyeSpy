@@ -12,9 +12,10 @@ Both use the fixation locations already in the parquet ((0, 0) = image centre):
   distance = hypot(x, y)          per fixation, then averaged per participant
   variance = Var(x) + Var(y)      across a participant's fixations of that type
 
-Reads:  data/NSS_all_fixations_clean.parquet   (one row per fixation, NSSExporter.py)
-Writes: Figures[_rep]/nss_analyses/FixationEccentricity_byAwareness.png
-        Figures[_rep]/nss_analyses/FixationSpatialVariance_byAwareness.png
+Reads:  Data.nosync/<dataset>/NSS_all_fixations_clean.parquet
+        (one row per fixation, NSSExporter.py)
+Writes: Figures/<dataset>/nss_analyses/FixationEccentricity_byAwareness.png
+        Figures/<dataset>/nss_analyses/FixationSpatialVariance_byAwareness.png
 """
 
 import sys
@@ -25,8 +26,8 @@ import seaborn as sns
 from pathlib import Path
 
 # Which dataset this figure is built from  (must be set before Settings is imported,
-# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
-# the parquet and results folder read, and the Figures[_rep]/ folder written.
+# because Settings reads EYESPY_DATASET on import and would otherwise ask). Everything
+# follows from it: the parquet and results folder read, and the Figures/ subfolder written.
 #   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.

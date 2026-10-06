@@ -22,8 +22,8 @@ each split by awareness and intact vs scrambled:
 The counts describe whatever calculation the pickle holds, so rerun NSS.py first if
 the NSS config has changed since.
 
-Reads:  data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
-        Analysis_Results/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
+Reads:  Data.nosync/<dataset>/NSS_all_fixations_clean.parquet     (NSSExporter.py)
+        Analysis_Results/<dataset>/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
 """
 
 import pickle

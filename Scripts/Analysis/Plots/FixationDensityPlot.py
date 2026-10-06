@@ -12,8 +12,8 @@ The Mooney column is awareness-split; the disambiguator columns are SESSION-spli
 awareness-split, matching how NSS.py builds its reference maps. The two unconscious rows
 therefore show the same session-U data by design (labelled on each panel).
 
-Reads:  data/NSS_all_fixations_clean.parquet          (NSSExporter.py)
-Writes: Figures[_rep]/nss_separated_analyses/FixationDensityPlot4.png
+Reads:  Data.nosync/<dataset>/NSS_all_fixations_clean.parquet  (NSSExporter.py)
+Writes: Figures/<dataset>/nss_separated_analyses/FixationDensityPlot4.png
 """
 
 import sys
@@ -32,8 +32,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, fo
 # Canvas, pixels-per-degree and blur radius come from Settings.py so this figure is
 # built on exactly the same geometry as the NSS calculation it illustrates.
 # Which dataset this figure is built from  (must be set before Settings is imported,
-# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
-# the parquet and results folder read, and the Figures[_rep]/ folder written.
+# because Settings reads EYESPY_DATASET on import and would otherwise ask). Everything
+# follows from it: the parquet and results folder read, and the Figures/ subfolder written.
 #   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.

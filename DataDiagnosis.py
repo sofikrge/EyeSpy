@@ -32,7 +32,7 @@ Outputs older than their own inputs are reported as stale rather than trusted.
 
 Strictly read-only: it recomputes nothing, creates no folders, and writes only the figure.
 
-DATASET below is CompleteRun.py's toggle and is the only switch a normal run needs: it
+DATASET below is the only switch a normal run needs (CompleteRun.py asks instead): it
 points the recordings, the parquet, Analysis_Results/<dataset>/, the figure and the EXCLUDE_*
 lists at one dataset together. Auditing data outside the repository takes --data, and then
 APPLY_EXCLUSIONS off (or --no-exclusions), because Settings.py's EXCLUDE_* lists name the
@@ -47,11 +47,11 @@ Reads:  <data>/raw/s_<SESSION>_<PID>.asc                          (blinks, calib
         Settings.py                                               (exclusions and thresholds)
         default <data> is data[_rep]/my_dataset/, following DATASET
         optional, for Analysed and Discarded:
-        Data_Quality_Checks[_rep]/blink_spatial_filtering.csv        (CompleteRun.py)
+        Data_Quality_Checks/<dataset>/blink_spatial_filtering.csv        (CompleteRun.py)
         data[_rep]/NSS_all_fixations_clean.parquet                 (NSSExporter.py)
         Analysis_Results/<dataset>/NSS_<mode>/NSS_crossphase_descriptives.pkl (NSS.py)
         Analysis_Results/<dataset>/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
-Writes: Figures[_rep]/DataDiagnosis.png                             (or --out)
+Writes: Figures/<dataset>/DataDiagnosis.png                             (or --out)
 """
 
 #%% Imports and configuration
@@ -65,11 +65,11 @@ import re
 import sys
 
 #%% Run switches: what a plain "Run" on this file uses (the command line overrides both)
-# DATASET is CompleteRun.py's toggle, and it has to be set before Settings.py is imported
-# because that is what Settings.py branches on. Setting it here is what keeps every path
+# DATASET has to be set before Settings.py is imported, because that is what Settings.py
+# branches on (and without it Settings.py would ask). Setting it here is what keeps every path
 # consistent in one move: the recordings, the parquet, Analysis_Results/<dataset>/, the figure
 # and - the reason APPLY_EXCLUSIONS can default to True - the matching EXCLUDE_* lists.
-DATASET          = "data_rep"   # "data_pilot" | "data_rep", exactly as in CompleteRun.py
+DATASET          = "data_rep"   # "data_pilot" | "data_rep"
 APPLY_EXCLUSIONS = True         # False -> judge every cell on its own data instead
 os.environ["EYESPY_DATASET"] = "rep" if DATASET == "data_rep" else "pilot"
 
@@ -147,8 +147,8 @@ RAW_DIR   = resolve(ARGS.raw, "raw", RAW_DATA_DIR)
 BEH_DIR   = resolve(ARGS.behavioural, "behavioural", BEHAVIOURAL_DIR)
 # Pipeline outputs belong to one dataset. Once the recordings are pointed somewhere else,
 # reusing this repo's outputs would score a different sample's participants against them,
-# so they are looked for beside the given dataset (mirroring data/my_dataset -> data/) and
-# otherwise not used at all; naming one outright always wins.
+# so they are looked for beside the given dataset (mirroring <dataset>/my_dataset ->
+# <dataset>/) and otherwise not used at all; naming one outright always wins.
 DATASET_ROOT = DATA_DIR or (RAW_DIR.parent if ARGS.raw else None)
 FIX_PATH  = (Path(ARGS.parquet).expanduser() if ARGS.parquet else
              DATASET_ROOT.parent / Path(FIX_FILE).name if DATASET_ROOT else Path(FIX_FILE))

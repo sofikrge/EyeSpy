@@ -9,8 +9,8 @@ at all" to "did the drop rules remove it":
      Images where this is 0 get dropped by MIN_VIEWINGS_PER_IMAGE_CROSS.
   3. Which images did the participant actually get scored on?
 
-Reads:  data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
-        Analysis_Results/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
+Reads:  Data.nosync/<dataset>/NSS_all_fixations_clean.parquet     (NSSExporter.py)
+        Analysis_Results/<dataset>/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
 """
 
 from pathlib import Path

@@ -7,7 +7,7 @@ This asks whether that is spread across the group or carried by a few participan
 Sorted by mean NSS_diff (intact - scrambled) ascending: most-negative at the top drove
 the effect hardest, positive values worked against it.
 
-Reads:  Analysis_Results/NSS_<mode>/NSS_crossphase_descriptives.pkl   (NSS.py)
+Reads:  Analysis_Results/<dataset>/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
 """
 
 from pathlib import Path

@@ -11,8 +11,8 @@ per session letter - for the "how did people answer overall" number that the per
 bars cannot be read off by eye.
 
 Reads:  <behavioural>/expdata_<SESSION>_<PID>.mat   (the Experiment and Extra trials)
-Writes: Figures[_rep]/ResponseDistributions.png
-        Figures[_rep]/ResponseDistributionsPooled.png
+Writes: Figures/<dataset>/ResponseDistributions.png
+        Figures/<dataset>/ResponseDistributionsPooled.png
 """
 
 import sys
@@ -24,8 +24,8 @@ import scipy.io as sio
 import matplotlib.pyplot as plt
 
 # Which dataset this figure is built from  (must be set before Settings is imported,
-# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
-# the parquet and results folder read, and the Figures[_rep]/ folder written.
+# because Settings reads EYESPY_DATASET on import and would otherwise ask). Everything
+# follows from it: the parquet and results folder read, and the Figures/ subfolder written.
 #   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.

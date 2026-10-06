@@ -1,7 +1,8 @@
 """Run-mode selection and output paths for the NSS pipeline.
 
 Every script that reads or writes cross-phase outputs calls `select()` at startup. The
-modes come from Settings.py, so a full run needs no arguments and no prompts:
+modes come from Settings.py, so a full run needs no arguments and asks nothing beyond the
+dataset (see Settings.py):
 
     MOONEY_SPLIT  and  TRIAL_SET   read from Settings.py
     BLINK_MODE                     derived from Settings.INTERPOLATE_BLINKS
@@ -10,15 +11,15 @@ Deriving the blink mode is what stops the analysis reading a results folder Stag
 built. The three values can still be overridden for one-off runs by setting the
 MOONEY_SPLIT / TRIAL_SET / BLINK_MODE environment variables.
 
-Folder layout, relative to the project root ("Analysis_Results" is Settings.ANALYSES_ROOT,
-Analysis_Results/pilot/ or Analysis_Results/rep/). <suffix> is the trial-set suffix followed by
-the blink-mode suffix, e.g. "", "_interp", "_exponly", "_exponly_interp":
+Folder layout, relative to the project root (Analysis_Results/<dataset>/ is
+Settings.ANALYSES_ROOT). <suffix> is the trial-set suffix followed by the blink-mode
+suffix, e.g. "", "_interp", "_exponly", "_exponly_interp":
 
-    Analysis_Results/NSS<suffix>/            shared across Mooney modes
+    Analysis_Results/<dataset>/NSS<suffix>/          shared across Mooney modes
         FixMaps_full.pkl
         NSS_WithinPhase.pkl
         NSS_WithinPhase_LongFormat.csv
-    Analysis_Results/NSS_<mode><suffix>/     mode = whole | halves
+    Analysis_Results/<dataset>/NSS_<mode><suffix>/   mode = whole | halves
         NSS_crossphase_descriptives.pkl
         NSS_CrossPhase_LongFormat.csv
         NSS_CrossPhase_LongFormat_centred.csv

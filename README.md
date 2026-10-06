@@ -20,13 +20,18 @@ rebuilds the environment these results were produced with. `pymovements` in part
 does the event detection, so upgrading it can change the fixations everything downstream
 is built on: bump a version deliberately, then rerun and check the results still hold.
 
-The pipeline expects the data laid out like this (everything under `data/` is
-gitignored, only code is tracked):
+There are two datasets, `pilot` and `rep` (the replication). Each has its own folder,
+and the pipeline expects the data laid out like this (everything under `Data.nosync/` is
+gitignored, only code is tracked; `.nosync` also keeps it out of iCloud):
 
 ```
-data/my_dataset/raw/s_<SESSION>_<PID>.asc
-data/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
+Data.nosync/<dataset>/my_dataset/raw/s_<SESSION>_<PID>.asc
+Data.nosync/<dataset>/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
 ```
+
+Settings shared by both datasets live in `Settings.py`; what differs (screen geometry,
+eye offset, image size, pixels per degree, exclusions) lives in `Settings_pilot.py` and
+`Settings_rep.py`. Every output folder has one `<dataset>/` subfolder per dataset.
 
 `SESSION` is a letter (`C` conscious, `U` unconscious) and `PID` is digits.
 
@@ -35,19 +40,19 @@ data/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
 Two stages that communicate only through files on disk, never through imports:
 
 ```
-data/my_dataset/raw/*.asc  +  behavioural/*.mat
+Data.nosync/<dataset>/my_dataset/raw/*.asc  +  behavioural/*.mat
     |   Stage 1: CompleteRun.py
     v
-data/events_cleaned/*.csv  +  all_events_cleaned.csv
+Data.nosync/<dataset>/events_cleaned/*.csv  +  all_events_cleaned.csv
     |   Stage 2: NSSExporter.py
     v
-data/NSS_all_fixations_clean.parquet
+Data.nosync/<dataset>/NSS_all_fixations_clean.parquet
     |   NSS.py
     v
-Analysis_Results/    pickled caches + long-format CSVs for Jamovi
+Analysis_Results/<dataset>/    pickled caches + long-format CSVs for Jamovi
     |
     v
-Figures/            plots
+Figures/<dataset>/             plots
 ```
 
 ### The whole pipeline
@@ -57,7 +62,9 @@ python3 CompleteRun.py
 ```
 
 Runs everything: preprocessing, then `NSSExporter.py`, then `NSS.py`. It takes no
-arguments and asks no questions, because every setting comes from `Settings.py`.
+arguments and asks one question, which dataset to analyse (`pilot` or `rep`); every other
+setting comes from the settings files. Setting `EYESPY_DATASET=pilot` or `=rep` beforehand
+skips the question.
 
 Stage 1 runs pymovements (load, `pix2deg`, offset correction, `pos2vel`, IVT event
 detection) and then this project's own steps: blink and spatial filtering, trial and
@@ -100,7 +107,7 @@ For a one-off run without editing `Settings.py`, the environment overrides them:
 TRIAL_SET=extra python3 Scripts/Analysis/NSS/NSS.py
 ```
 
-Output folders are suffixed to match: `Analysis_Results/NSS_whole/`,
+Output folders are suffixed to match: `Analysis_Results/<dataset>/NSS_whole/`,
 `NSS_whole_exponly_interp/`, and so on. `Scripts/Analysis/NSS/NSSPaths.py` is the single
 source of truth for these paths.
 
@@ -131,8 +138,8 @@ Every script's docstring says what it reads and what it writes.
 - That includes the run modes (`MOONEY_SPLIT`, `TRIAL_SET`), which select the results
   folder. The blink mode is not a separate setting: it follows from
   `INTERPOLATE_BLINKS`.
-- `DEBUG` gates I/O, not just logging: with it on, the intermediate `data/events/` CSVs
-  and all the QC figures under `Data_Quality_Checks/` get written. `NSS_DEBUG` is the
+- `DEBUG` gates I/O, not just logging: with it on, the intermediate `Data.nosync/<dataset>/events/` CSVs
+  and all the QC figures under `Data_Quality_Checks/<dataset>/` get written. `NSS_DEBUG` is the
   separate Stage-2 flag.
 - `Scripts/Analysis/Plots/MooneysOnDisamb.py` hardcodes absolute stimulus-image paths
   that must be edited to run on another machine.

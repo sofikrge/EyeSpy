@@ -1,9 +1,9 @@
 """Per-dataset values for the replication dataset in Data.nosync/rep/.
 
 Settings.py applies this file (last, so it wins) whenever EYESPY_DATASET=rep. The
-Data.nosync/rep/ paths and the rep/ output subfolders already follow from that choice, so this
-file holds only the parameters that genuinely differ between the two datasets (the
-same names as Settings_pilot.py); everything else is left to Settings.py.
+Data.nosync/rep/ paths and the rep/ output subfolders already follow from that choice,
+so this file holds only the parameters that genuinely differ between the two datasets
+(the same names as Settings_pilot.py); everything else is left to Settings.py.
 
 Anything defined in Settings.py can also be redefined below by assigning it again, e.g.
 

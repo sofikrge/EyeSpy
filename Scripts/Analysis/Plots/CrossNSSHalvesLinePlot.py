@@ -14,7 +14,7 @@ No data file is read: the EMMs are pasted in below by hand from the fitted lmer 
 Note the export now calls that between-trial split `Experiment_Third` and gives it
 three levels; the EMMs below are from the earlier two-level median split.
 
-Writes: Figures[_rep]/nss_separated_analyses/CrossNSSHalvesLinePlot.png
+Writes: Figures/<dataset>/nss_separated_analyses/CrossNSSHalvesLinePlot.png
 """
 
 from pathlib import Path
@@ -31,8 +31,8 @@ def darken(color, factor=0.55):
 
 # === CONFIG ===
 # Which dataset this figure is built from  (must be set before Settings is imported,
-# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
-# the parquet and results folder read, and the Figures[_rep]/ folder written.
+# because Settings reads EYESPY_DATASET on import and would otherwise ask). Everything
+# follows from it: the parquet and results folder read, and the Figures/ subfolder written.
 #   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.

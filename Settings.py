@@ -27,11 +27,10 @@ from pathlib import Path
 # Which dataset this run works on: "pilot" or "rep". Taken from EYESPY_DATASET if set
 # (a script's DATASET toggle, or `EYESPY_DATASET=rep python3 ...`), otherwise asked in
 # the terminal. The answer is written back to the environment so Stage-2 subprocesses
-# inherit it instead of asking again. It picks everything that differs per dataset:
-# the Data.nosync/<dataset>/ input folder, the <dataset>/ subfolder of every output folder, and
+# inherit it instead of asking again. It picks everything that differs per dataset: the
+# <dataset>/ subfolder of every input and output folder (the data sits under Data.nosync/
+# so iCloud does not upload it), the _<dataset> tag on figure filenames (_SUFFIX), and
 # Settings_<dataset>.py, applied at the bottom of this file on top of the values here.
-# Every input and output folder gets one <dataset>/ subfolder per dataset; the data sits
-# under Data.nosync/ so iCloud does not upload it, and _SUFFIX tags figure filenames.
 DATASETS = ("pilot", "rep")
 DATASET  = os.environ.get("EYESPY_DATASET") or input("Analyse which dataset? [pilot/rep]: ").strip()
 if DATASET not in DATASETS:

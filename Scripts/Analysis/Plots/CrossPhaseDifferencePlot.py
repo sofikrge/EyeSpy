@@ -12,7 +12,7 @@ so the picture and the test answer the same question.
 Run CrossPhaseModel.py first -- the estimates are read from what it saved, never refitted.
 
 Reads:  Analysis_Results/<dataset>/NSS_whole[_suffix]/CrossPhaseModel_<label>.csv  (CrossPhaseModel.py)
-Writes: Figures[_rep]/nss_analyses/NSS_CrossPhase_Difference_<label>*.png
+Writes: Figures/<dataset>/nss_analyses/NSS_CrossPhase_Difference_<label>*.png
 """
 
 from pathlib import Path
@@ -21,8 +21,8 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 # === CONFIG ===
-# Which dataset to plot, the same toggle CompleteRun.py has and for the same reason: it
-# has to be set before Settings is imported, so it sits above the imports below.
+# Which dataset to plot. It has to be set before Settings is imported (Settings reads
+# EYESPY_DATASET on import and would otherwise ask), so it sits above the imports below.
 import os
 DATASET = "data_rep"   # "data_pilot" | "data_rep"
 os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")

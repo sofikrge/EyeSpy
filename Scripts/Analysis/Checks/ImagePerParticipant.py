@@ -14,8 +14,8 @@ import sys
 from pathlib import Path
 import pandas as pd
 
-# Which dataset, the same toggle CompleteRun.py has and for the same reason: it has to be
-# set before Settings is imported. setdefault, not assignment, so a one-off
+# Which dataset. It has to be set before Settings is imported, which reads EYESPY_DATASET
+# on import and would otherwise ask. setdefault, not assignment, so a one-off
 # `EYESPY_DATASET=rep python3 ...` still wins.
 import os
 DATASET = "data_rep"   # "data_pilot" | "data_rep"

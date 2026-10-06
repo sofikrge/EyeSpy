@@ -16,7 +16,7 @@ edited to run on another machine.
 Reads:  Analysis_Results/<dataset>/NSS_whole[_suffix]/NSS_crossphase_descriptives.pkl (NSS.py)
         Analysis_Results/<dataset>/NSS[_suffix]/FixMaps_full.pkl                     (NSS.py)
         data[_rep]/NSS_all_fixations_clean.parquet                              (NSSExporter.py)
-Writes: Figures[_rep]/nss_separated_analyses/MooneysOnDisamb/Rank_<nn>_<image>.png
+Writes: Figures/<dataset>/nss_separated_analyses/MooneysOnDisamb/Rank_<nn>_<image>.png
 """
 
 import sys
@@ -31,8 +31,8 @@ from scipy.fft import fft2, ifft2
 # === CONFIG ===
 
 # Which dataset this figure is built from  (must be set before Settings is imported,
-# the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
-# the parquet and results folder read, and the Figures[_rep]/ folder written.
+# because Settings reads EYESPY_DATASET on import and would otherwise ask). Everything
+# follows from it: the parquet and results folder read, and the Figures/ subfolder written.
 #   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
