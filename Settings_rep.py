@@ -1,15 +1,13 @@
-"""Per-dataset overrides for the replication dataset in data_rep/.
+"""Per-dataset values for the replication dataset in Data.nosync/rep/.
 
-Settings.py applies this file (last, so it wins) whenever EYESPY_DATASET=rep, which
-CompleteRun.py sets from its DATASET toggle. The data_rep/ paths, the
-DataQualityChecks_rep/ folder and the analysesresults_rep/ results root already follow
-from that switch, so this file holds only the parameters that genuinely differ between
-the two datasets; everything else is left to Settings.py.
+Settings.py applies this file (last, so it wins) whenever EYESPY_DATASET=rep. The
+Data.nosync/rep/ paths and the rep/ output subfolders already follow from that choice, so this
+file holds only the parameters that genuinely differ between the two datasets (the
+same names as Settings_pilot.py); everything else is left to Settings.py.
 
-Anything defined in Settings.py can be redefined below by assigning it again, e.g.
+Anything defined in Settings.py can also be redefined below by assigning it again, e.g.
 
     INTERPOLATE_BLINKS = False        # replication uses the blink-drop method
-    EXCLUDE_SESSIONS   = {}           # different participants, different exclusions
 
 Reads:  nothing
 Writes: nothing
@@ -27,8 +25,7 @@ SCREEN = {
 EYE_OFFSET = {"left": +5.31, "right": -5.31}   # horizontal eye offset, visual degrees
 IMAGE_SIZE_DEG = (10.00, 7.51)                 # stimulus extent, visual degrees
 
-# Exclusions, defined here even while empty: without them the replication run would
-# inherit the pilot's participant numbers from Settings.py. Fill in as they are decided.
+# Exclusions: all three must be defined here, even when empty, since Settings.py has none.
 EXCLUDE_SUBJECTS = [103, 109, 120, 132    # not enough PAS 0 trials, for 109 Talya also turned on light mid block IDK when exactly
 ]
 
@@ -47,6 +44,7 @@ EXCLUDE_BLOCKS = {106: {'U': [3, 5]}, # moved camera mid block
                   127: {'U': [1, 2, 8]}, # fell asleep in these blocks
                   129: {'U': [2]}, # eyes closing a lot so perhaps too tired
                   134:  {'U': [1]}, # had hands on wrong buttons
+                  135:  {'U': [1, 2]}, # moved wooden divider so saw some images to the right of the frame
                   
 
 }

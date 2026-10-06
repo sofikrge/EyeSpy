@@ -27,16 +27,16 @@ from pathlib import Path
 # Which dataset this figure is built from  (must be set before Settings is imported,
 # the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
 # the parquet and results folder read, and the Figures[_rep]/ folder written.
-#   "data"     the pilot in data/            -> Figures/
-#   "data_rep" the replication in data_rep/  -> Figures_rep/
+#   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
+#   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
 import os
-DATASET = "data_rep"   # "data" | "data_rep"
-os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+DATASET = "data_rep"   # "data_pilot" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
-from Settings import FIX_FILE as INPUT_FILE, _SUFFIX as DATASET_SUFFIX
-OUTPUT_DIR = Path(f"Figures{DATASET_SUFFIX}/nss_analyses"); OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+from Settings import FIX_FILE as INPUT_FILE, FIGURES_ROOT
+OUTPUT_DIR = Path(f"{FIGURES_ROOT}/nss_analyses"); OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GROUP_MAP = {
     "conscious_aware":    "Conscious Aware\n(PAS 2-3)",

@@ -2,9 +2,9 @@
 
 # Pipeline input and output.
 # The * suffixes also catch the one-off variant folders (*OLD, *BackUp, RIGHTINTERPOL*).
-data*/
-*analysesresults*/
-DataQualityChecks*/
+Data*/
+*Analysis_Results*/
+Data_Quality_Checks*/
 Figures*/
 Archive/
 
@@ -26,3 +26,5 @@ scratchpad_*
 .claude/
 CLAUDE.md
 /Preregistration
+notes.txt
+/Power Analysis

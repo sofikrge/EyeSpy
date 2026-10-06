@@ -23,7 +23,7 @@ The counts describe whatever calculation the pickle holds, so rerun NSS.py first
 the NSS config has changed since.
 
 Reads:  data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
-        analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
+        Analysis_Results/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
 """
 
 import pickle

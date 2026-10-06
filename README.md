@@ -44,7 +44,7 @@ data/events_cleaned/*.csv  +  all_events_cleaned.csv
 data/NSS_all_fixations_clean.parquet
     |   NSS.py
     v
-analysesresults/    pickled caches + long-format CSVs for Jamovi
+Analysis_Results/    pickled caches + long-format CSVs for Jamovi
     |
     v
 Figures/            plots
@@ -100,7 +100,7 @@ For a one-off run without editing `Settings.py`, the environment overrides them:
 TRIAL_SET=extra python3 Scripts/Analysis/NSS/NSS.py
 ```
 
-Output folders are suffixed to match: `analysesresults/NSS_whole/`,
+Output folders are suffixed to match: `Analysis_Results/NSS_whole/`,
 `NSS_whole_exponly_interp/`, and so on. `Scripts/Analysis/NSS/NSSPaths.py` is the single
 source of truth for these paths.
 
@@ -132,7 +132,7 @@ Every script's docstring says what it reads and what it writes.
   folder. The blink mode is not a separate setting: it follows from
   `INTERPOLATE_BLINKS`.
 - `DEBUG` gates I/O, not just logging: with it on, the intermediate `data/events/` CSVs
-  and all the QC figures under `DataQualityChecks/` get written. `NSS_DEBUG` is the
+  and all the QC figures under `Data_Quality_Checks/` get written. `NSS_DEBUG` is the
   separate Stage-2 flag.
 - `Scripts/Analysis/Plots/MooneysOnDisamb.py` hardcodes absolute stimulus-image paths
   that must be edited to run on another machine.

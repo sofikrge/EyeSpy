@@ -16,7 +16,7 @@ Reads the raw .asc files directly, so it needs no pipeline run. It does read eve
 sample, so allow ~2 min. From the project root:
     python3 Scripts/Preprocessing/Diagnostics/BlinkContaminationProfile.py
 
-Writes (under DataQualityChecks/blink_interpolation/):
+Writes (under Data_Quality_Checks/<dataset>/blink_interpolation/):
     blink_contamination_profile.png    - 2x2: pupil & gaze-speed, onset- and offset-locked
     blink_contamination_report.txt     - where the signal departs / recovers
 """
@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 
 import Settings as settings
 
-OUT = Path("DataQualityChecks/blink_interpolation"); OUT.mkdir(parents=True, exist_ok=True)
+OUT = Path(settings.data_quality_folder, "blink_interpolation"); OUT.mkdir(parents=True, exist_ok=True)
 WIN = 350          # ms of context on each side of a blink edge
 MARGIN = settings.BLINK_MARGIN_MS   # the margin this diagnostic is checking
 OLD_BUFFER = 51    # the primary filter method's buffer, for comparison

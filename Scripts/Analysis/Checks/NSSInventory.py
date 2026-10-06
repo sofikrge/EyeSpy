@@ -6,9 +6,9 @@ dropped and why; the subject-count distributions behind those drops; cross-phase
 sizes per awareness state; images left with 0 subjects; and how well the typicality
 covariate joins onto the cross-phase rows.
 
-Reads:  analysesresults/NSS[_suffix]/FixMaps_full.pkl                (NSS.py)
-        analysesresults/NSS[_suffix]/NSS_WithinPhase.pkl             (NSS.py)
-        analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl   (NSS.py)
+Reads:  Analysis_Results/NSS[_suffix]/FixMaps_full.pkl                (NSS.py)
+        Analysis_Results/NSS[_suffix]/NSS_WithinPhase.pkl             (NSS.py)
+        Analysis_Results/NSS_<mode>/NSS_crossphase_descriptives.pkl   (NSS.py)
         data/NSS_all_fixations_clean.parquet                         (NSSExporter.py)
 """
 

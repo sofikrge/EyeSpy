@@ -6,13 +6,13 @@ Both stages read their parameters from here and configure nothing themselves:
                               codes, exclusions, and the pymovements dataset
     Stage 2 (NSS analysis)    canvas size, pixels-per-degree, subject thresholds
 
-Anything that varies per run rather than per project stays out of this file: the
-Mooney split, trial set and blink mode are chosen at runtime (see NSSPaths.py), and
-the output paths follow from them.
+What differs between the pilot and the replication (recording rig, exclusions) lives
+in Settings_pilot.py / Settings_rep.py, applied on top of this file for the dataset
+chosen at the top.
 
 One thing to know before changing anything: DEBUG gates I/O, not just logging. With
-DEBUG on, the intermediate data/events/ CSVs and every QC figure under
-DataQualityChecks/ get written.
+DEBUG on, the intermediate Data.nosync/<dataset>/events/ CSVs and every QC figure under
+Data_Quality_Checks/<dataset>/ get written.
 """
 
 #%% Imports
@@ -24,27 +24,30 @@ import pymovements as pm
 from pathlib import Path
 
 #%% ============================ DATASET SELECTION ==============================
-# Which dataset this run works on. CompleteRun.py sets EYESPY_DATASET from its
-# DATASET toggle; set it by hand (EYESPY_DATASET=rep) when running a Stage-2 script
-# on its own. "rep" swaps in the data_rep/ folder and applies Settings_rep.py at the
-# bottom of this file, so every parameter below can be overridden per dataset.
-REP       = os.environ.get("EYESPY_DATASET", "") == "rep"
-DATA_ROOT = "data_rep" if REP else "data"
-_SUFFIX   = "_rep" if REP else ""
+# Which dataset this run works on: "pilot" or "rep". Taken from EYESPY_DATASET if set
+# (a script's DATASET toggle, or `EYESPY_DATASET=rep python3 ...`), otherwise asked in
+# the terminal. The answer is written back to the environment so Stage-2 subprocesses
+# inherit it instead of asking again. It picks everything that differs per dataset:
+# the Data.nosync/<dataset>/ input folder, the <dataset>/ subfolder of every output folder, and
+# Settings_<dataset>.py, applied at the bottom of this file on top of the values here.
+# Every input and output folder gets one <dataset>/ subfolder per dataset; the data sits
+# under Data.nosync/ so iCloud does not upload it, and _SUFFIX tags figure filenames.
+DATASETS = ("pilot", "rep")
+DATASET  = os.environ.get("EYESPY_DATASET") or input("Analyse which dataset? [pilot/rep]: ").strip()
+if DATASET not in DATASETS:
+    raise SystemExit(f"Unknown dataset {DATASET!r}; choose one of {DATASETS}.")
+os.environ["EYESPY_DATASET"] = DATASET
+
+DATA_ROOT = f"Data.nosync/{DATASET}"
+_SUFFIX   = f"_{DATASET}"
 
 #%% =========================== STAGE 1: PREPROCESSING ===========================
 
 DEBUG = True
 
-# Screen geometry of the recording rig, in the units pymovements wants (cm).
-# Everything derived from it is built at the bottom of this file, after the
-# replication overrides, so Settings_rep.py can change it.
-SCREEN = { # adjust to your parameters
-    "width_px": 1920, "height_px": 1080,
-    "width_cm": 53.2, "height_cm": 29.8,   # pilot rig; the replication overrides this
-    "distance_cm": 74.0,
-    "origin": "upper left",
-    "sampling_rate": 1000}
+# Set per dataset in Settings_<dataset>.py, not here: the recording rig (SCREEN,
+# EYE_OFFSET, IMAGE_SIZE_DEG, MASK_PPD) and the exclusions (EXCLUDE_SUBJECTS,
+# EXCLUDE_SESSIONS, EXCLUDE_BLOCKS).
 
 filename_format = {'gaze': r's_{session_id:s}_{participant_id:d}.asc'}
 filename_format_schema_overrides = {'gaze': {'session_id': str, 'participant_id': str}}
@@ -53,14 +56,11 @@ time_column, time_unit = 'time', 'ms'
 pixel_columns = ['x_right', 'y_right', 'x_left', 'y_left']
 
 # Folders (each writer creates it on demand, so nothing is made just by importing)
-data_quality_folder = f'DataQualityChecks{_SUFFIX}/'
+data_quality_folder = f'Data_Quality_Checks/{DATASET}/'
 
 # Validation thresholds
 VALIDATION_ACCURACY_AVG_THRESHOLD = 1.0  # degrees
 VALIDATION_ACCURACY_MAX_THRESHOLD = 1.5  # degrees
-
-# Offset value of eyes in visual degrees 
-EYE_OFFSET = {"left": +5.44, "right": -5.44} 
 
 RAW_DATA_DIR = os.path.join(DATA_ROOT, 'my_dataset', 'raw') # path to raw data for manual blink parsing
 EVENTS_OUT_DIR = os.path.join(DATA_ROOT, 'events')
@@ -86,7 +86,6 @@ INTERPOLATE_BLINKS = True
 MAX_BLINK_INTERP_MS = 150   # longer gaps are track loss, left as gaps
 BLINK_MARGIN_MS = 200       # each blink is widened by this before interpolating
 
-IMAGE_SIZE_DEG = (9.99, 7.50)   # pilot rig; the replication overrides this
 CENTER_RADIUS_DG = 1.5 #shaked's value
 
 # Event markers
@@ -118,38 +117,10 @@ MAT_FIELD_MAP = {
     'response_PAS_Q': 'response_PAS_Q',
 }
 
-EXCLUDE_SUBJECTS = [ 
-# 104, 106, 109, 110, 112, 118, 120, # left dominant eye
-]
-
-# Format: { ParticipantID: ['SessionLetter'] }
-EXCLUDE_SESSIONS = {
-#    104: ['U'], # unfocused eyes sometimes
-#    105: ['U'], # unfocused eyes sometimes
-#    106: ['U'], # unfocused eyes sometimes
-    107: ['U'], # low PAS 0 trials
-    111: ['U'], # low PAS 0 trials
-    110: ['U'], # low PAS 0 trials
-    118: ['U'], # low PAS 0 trials
-#    112: ['C'], # unfocused eyes sometimes
-}
-
 # How many Experiment blocks a session has before its Extra blocks begin. Only used to
-# read EXCLUDE_BLOCKS below; every session of both datasets records exactly four.
+# read EXCLUDE_BLOCKS (Settings_<dataset>.py); every session of both datasets records
+# exactly four.
 N_EXPERIMENT_BLOCKS = 4
-
-# Exclude specific BLOCKS per session per participant
-# Format: { ParticipantID: { 'SessionID': [BlockNums] } }
-# Block numbers are the session's RUNNING ORDER, the way they are written down during
-# recording: 1-4 are the Experiment blocks, 5 onwards are the Extra blocks (5 = Extra 1).
-# The saved BlockNum column restarts at 1 in the Extra block, so the numbers here are not
-# that column; TrialMetadata.apply_behavioral_filters_and_save translates them, and warns
-# about any number the session does not actually have.
-EXCLUDE_BLOCKS = {
-#    112: {'U': [4, 5]},             # Unfocused eyes sometimes
-    117: {'C': [1]},                # Technical mistake
-    119: {'U': [1, 2, 3, 4, 5, 6]}  # Unfocused eyes sometimes
-}
 
 # Plotting colours
 FILTER_PALETTE = ['#edf8fb', '#b3cde3', '#8c96c6', '#88419d']
@@ -175,10 +146,10 @@ NSS_DEBUG = True   # separate from Stage 1's DEBUG: prints per-image NSS diagnos
 # degree 0 at its centre. Inherited from the MATLAB implementation (REFERENCES.md).
 IMAGE_HEIGHT = 600
 IMAGE_WIDTH  = 800
-MASK_PPD     = 48.55            # pixels per visual degree (pilot rig; see Settings_rep.py)
 
 FIX_FILE = Path(f"{DATA_ROOT}/NSS_all_fixations_clean.parquet")   # written by NSSExporter.py
-ANALYSES_ROOT = f"analysesresults{_SUFFIX}"   # NSSPaths.py builds its NSS_* folders in here
+ANALYSES_ROOT = f"Analysis_Results/{DATASET}"   # NSSPaths.py builds its NSS_* folders in here
+FIGURES_ROOT  = f"Figures/{DATASET}"           # every Plots/ script writes in here
 
 # How much data an image needs before it is scored at all.
 MIN_SUBJ_PER_IMAGE_NSS    = 2    # within-phase: minimum subjects per image
@@ -198,18 +169,16 @@ MIN_IMAGES_PER_PARTICIPANT = 15   # ImagePerParticipant.py flags anyone below th
 MIN_FIX_PER_PARTICIPANT    = 20   # LeftBiasPerParticipant.py ignores thinner cells
 
 
-#%% ======================= REPLICATION-DATASET OVERRIDES ========================
-# Applied last, so Settings_rep.py can override anything above for the data_rep/
-# dataset. The pilot run never touches it.
-if REP:
-    print("[Settings] EYESPY_DATASET=rep -> applying Settings_rep.py overrides")
-    from Settings_rep import *  # noqa: F401,F403
+#%% ======================== PER-DATASET VALUES ==========================
+# Applied last, so Settings_<dataset>.py can also override anything above.
+print(f"[Settings] EYESPY_DATASET={DATASET} -> applying Settings_{DATASET}.py")
+exec(f"from Settings_{DATASET} import *")
 
 
 #%% ============================== DERIVED VALUES ================================
 # Built last, from the values above as the overrides left them. Nothing here is a
 # parameter: every line restates one of them, so overriding SCREEN, IMAGE_SIZE_DEG or
-# MASK_PPD in Settings_rep.py reaches the pymovements dataset, the image bounds and the
+# MASK_PPD in Settings_<dataset>.py reaches the pymovements dataset, the image bounds and the
 # blur radius instead of being silently ignored.
 
 HX, HY = IMAGE_SIZE_DEG[0] / 2, IMAGE_SIZE_DEG[1] / 2   # image half-extent, degrees

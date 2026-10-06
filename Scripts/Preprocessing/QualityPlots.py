@@ -1,4 +1,4 @@
-"""Quality-control figures for Stage 1, written to DataQualityChecks/.
+"""Quality-control figures for Stage 1, written to Data_Quality_Checks/.
 
 Called from Preprocessing.py at the points where data is dropped or reshaped, so each
 figure answers "did that step do what I think it did": validation accuracy per session,

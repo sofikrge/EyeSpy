@@ -7,12 +7,19 @@ enough to be worth a closer look in DiagnoseParticipantCoverage.py.
 Counts rows, i.e. scoring events (image x trial), so an image seen on two trials
 counts twice. Both are valid data points.
 
-Reads:  analysesresults/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
+Reads:  Analysis_Results/<dataset>/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
 """
 
 import sys
 from pathlib import Path
 import pandas as pd
+
+# Which dataset, the same toggle CompleteRun.py has and for the same reason: it has to be
+# set before Settings is imported. setdefault, not assignment, so a one-off
+# `EYESPY_DATASET=rep python3 ...` still wins.
+import os
+DATASET = "data_rep"   # "data_pilot" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 from Scripts.Analysis.NSS import NSSPaths

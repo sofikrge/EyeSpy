@@ -4,37 +4,29 @@
     Stage 2  NSSExporter.py then NSS.py, each as a subprocess
 
 Every parameter comes from Settings.py and nothing is configured here, so a run needs
-no arguments and asks no questions. That includes the run modes: MOONEY_SPLIT and
-TRIAL_SET are read from Settings.py, and BLINK_MODE is derived from INTERPOLATE_BLINKS,
-so Stage 2 can only ever read the results folder Stage 1 just built.
+no arguments and asks one question: which dataset, pilot or rep. The run modes come
+from Settings.py too: MOONEY_SPLIT and TRIAL_SET are read from it, and BLINK_MODE is
+derived from INTERPOLATE_BLINKS, so Stage 2 can only ever read the results folder
+Stage 1 just built.
 
 Written as `#%%` cells, so Stage 1 can still be stepped through in an interactive window
 without triggering Stage 2. Run it from the project root:
 
     python3 CompleteRun.py
 
-The DATASET toggle at the top picks which dataset to run on: data/ (Settings.py) or
-data_rep/ (Settings.py with Settings_rep.py applied on top). Paths below are shown for
-data/; a data_rep run writes the same tree under data_rep/ and analysesresults_rep/.
+The dataset is asked for in the terminal when Settings is first imported (skipped if
+EYESPY_DATASET is already set). It picks Data.nosync/<dataset>/, Settings_<dataset>.py and the
+_<dataset> suffix on every output folder; Stage 2 inherits it through the environment.
 
-Reads:  data/my_dataset/raw/s_<SESSION>_<PID>.asc
-        data/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
-Writes: data/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
-        data/NSS_all_fixations_clean.parquet
-        analysesresults/NSS[_suffix]/ and analysesresults/NSS_<mode>[_suffix]/
-        DataQualityChecks/  (figures, only when DEBUG is on in Settings.py)
+Reads:  Data.nosync/<dataset>/my_dataset/raw/s_<SESSION>_<PID>.asc
+        Data.nosync/<dataset>/my_dataset/behavioural/expdata_<SESSION>_<PID>.mat
+Writes: Data.nosync/<dataset>/events_cleaned/s_<SESSION>_<PID>.csv  +  all_events_cleaned.csv
+        Data.nosync/<dataset>/NSS_all_fixations_clean.parquet
+        Analysis_Results/<dataset>/NSS[_suffix]/ and .../NSS_<mode>[_suffix]/
+        Data_Quality_Checks/<dataset>/  (figures, only when DEBUG is on in Settings.py)
 """
 
-#%% Dataset toggle  (must be set before Settings is imported)
-# "data"     the pilot dataset in data/,     configured by Settings.py
-# "data_rep" the replication set in data_rep/, Settings.py plus Settings_rep.py on top
-# Everything downstream follows: the events/parquet folders, DataQualityChecks[_rep]/
-# and analysesresults[_rep]/. Stage 2 inherits the choice through the environment.
-import os
-DATASET = "data_rep"   # "data" | "data_rep"
-os.environ["EYESPY_DATASET"] = "rep" if DATASET == "data_rep" else ""
-
-#%% Imports
+#%% Imports  (the first Settings import asks which dataset to analyse)
 import Scripts.Preprocessing.BlinkInterpolation as blinks
 import Scripts.Preprocessing.GazeCorrection as gaze
 import Scripts.Preprocessing.EventFiltering as events
@@ -130,7 +122,7 @@ STAGE2 = [
 
 blink_mode = "interp" if settings.INTERPOLATE_BLINKS else "filter"
 print(f"\n{'=' * 70}")
-print(f"Stage 1 complete. Running Stage 2 on {DATASET} with MOONEY_SPLIT={settings.MOONEY_SPLIT}, "
+print(f"Stage 1 complete. Running Stage 2 on {settings.DATASET} with MOONEY_SPLIT={settings.MOONEY_SPLIT}, "
       f"TRIAL_SET={settings.TRIAL_SET}, BLINK_MODE={blink_mode}")
 print("=" * 70)
 

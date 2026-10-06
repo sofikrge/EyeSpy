@@ -10,7 +10,7 @@ at all" to "did the drop rules remove it":
   3. Which images did the participant actually get scored on?
 
 Reads:  data/NSS_all_fixations_clean.parquet                        (NSSExporter.py)
-        analysesresults/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
+        Analysis_Results/NSS_<mode>/NSS_crossphase_descriptives.pkl  (NSS.py)
 """
 
 from pathlib import Path

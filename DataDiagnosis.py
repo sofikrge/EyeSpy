@@ -33,7 +33,7 @@ Outputs older than their own inputs are reported as stale rather than trusted.
 Strictly read-only: it recomputes nothing, creates no folders, and writes only the figure.
 
 DATASET below is CompleteRun.py's toggle and is the only switch a normal run needs: it
-points the recordings, the parquet, analysesresults[_rep]/, the figure and the EXCLUDE_*
+points the recordings, the parquet, Analysis_Results/<dataset>/, the figure and the EXCLUDE_*
 lists at one dataset together. Auditing data outside the repository takes --data, and then
 APPLY_EXCLUSIONS off (or --no-exclusions), because Settings.py's EXCLUDE_* lists name the
 participants of a dataset whose numbering another dataset repeats:
@@ -47,10 +47,10 @@ Reads:  <data>/raw/s_<SESSION>_<PID>.asc                          (blinks, calib
         Settings.py                                               (exclusions and thresholds)
         default <data> is data[_rep]/my_dataset/, following DATASET
         optional, for Analysed and Discarded:
-        DataQualityChecks[_rep]/blink_spatial_filtering.csv        (CompleteRun.py)
+        Data_Quality_Checks[_rep]/blink_spatial_filtering.csv        (CompleteRun.py)
         data[_rep]/NSS_all_fixations_clean.parquet                 (NSSExporter.py)
-        analysesresults[_rep]/NSS_<mode>/NSS_crossphase_descriptives.pkl (NSS.py)
-        analysesresults[_rep]/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
+        Analysis_Results/<dataset>/NSS_<mode>/NSS_crossphase_descriptives.pkl (NSS.py)
+        Analysis_Results/<dataset>/NSS_<mode>/NSS_CrossPhase_LongFormat.csv   (NSS.py)
 Writes: Figures[_rep]/DataDiagnosis.png                             (or --out)
 """
 
@@ -67,11 +67,11 @@ import sys
 #%% Run switches: what a plain "Run" on this file uses (the command line overrides both)
 # DATASET is CompleteRun.py's toggle, and it has to be set before Settings.py is imported
 # because that is what Settings.py branches on. Setting it here is what keeps every path
-# consistent in one move: the recordings, the parquet, analysesresults[_rep]/, the figure
+# consistent in one move: the recordings, the parquet, Analysis_Results/<dataset>/, the figure
 # and - the reason APPLY_EXCLUSIONS can default to True - the matching EXCLUDE_* lists.
-DATASET          = "data_rep"   # "data" | "data_rep", exactly as in CompleteRun.py
+DATASET          = "data_rep"   # "data_pilot" | "data_rep", exactly as in CompleteRun.py
 APPLY_EXCLUSIONS = True         # False -> judge every cell on its own data instead
-os.environ["EYESPY_DATASET"] = "rep" if DATASET == "data_rep" else ""
+os.environ["EYESPY_DATASET"] = "rep" if DATASET == "data_rep" else "pilot"
 
 import numpy as np
 import pandas as pd
@@ -87,12 +87,12 @@ from Settings import (RAW_DATA_DIR, BEHAVIOURAL_DIR, EVENTS_CLEANED_DIR, FIX_FIL
                       VALIDATION_ACCURACY_AVG_THRESHOLD, VALIDATION_ACCURACY_MAX_THRESHOLD,
                       CENTER_RADIUS_DG,
                       MIN_VIEWINGS_PER_IMAGE_CROSS, MIN_IMAGES_PER_CELL_CROSS,
-                      FILTER_PALETTE, _SUFFIX as DATASET_SUFFIX)
+                      FILTER_PALETTE, FIGURES_ROOT)
 from Scripts.Analysis.NSS.NSSPaths import TRIAL_SET_SUFFIX, BLINK_SUFFIX
 
 # The results folder for the modes in Settings.py. Built from ANALYSES_ROOT and NSSPaths'
 # own suffix maps rather than NSSPaths.select(), which would create the folder as a side
-# effect. ANALYSES_ROOT follows DATASET, so a data_rep run reads analysesresults_rep/.
+# effect. ANALYSES_ROOT follows DATASET, so a data_rep run reads Analysis_Results/rep/.
 BLINK_MODE    = "interp" if INTERPOLATE_BLINKS else "filter"
 DEFAULT_CROSS = Path(ANALYSES_ROOT, f"NSS_{MOONEY_SPLIT}"
                                     f"{TRIAL_SET_SUFFIX[TRIAL_SET]}{BLINK_SUFFIX[BLINK_MODE]}")
@@ -122,8 +122,8 @@ def parse_args():
     add("--parquet", metavar="FILE", help=f"fixations parquet, for the exact verdict (default: {FIX_FILE})")
     add("--results", metavar="DIR", help=f"NSS results folder, for the exact verdict (default: {DEFAULT_CROSS})")
     # Follows the dataset switch, like the plotting scripts: a data_rep run writes to
-    # Figures_rep/ so it cannot overwrite the pilot's figure (and vice versa).
-    add("--out", metavar="FILE", default=f"Figures{DATASET_SUFFIX}/DataDiagnosis.png",
+    # Figures/rep/ so it cannot overwrite the pilot's figure (and vice versa).
+    add("--out", metavar="FILE", default=f"{FIGURES_ROOT}/DataDiagnosis.png",
         help="figure to write (default: %(default)s)")
     add("--no-exclusions", action="store_true", default=not APPLY_EXCLUSIONS,
         help="ignore Settings.py's EXCLUDE_* lists, which name one dataset's participants "

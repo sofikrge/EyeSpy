@@ -13,7 +13,7 @@ built from one fewer person.
 The registered analysis is unchanged; this only reports what the alternative would give.
 
 Reads:  data[_rep]/NSS_all_fixations_clean.parquet          (NSSExporter.py)
-        analysesresults[_rep]/NSS[_suffix]/FixMaps_full.pkl  (NSS.py)
+        Analysis_Results/<dataset>/NSS[_suffix]/FixMaps_full.pkl  (NSS.py)
 Writes: nothing (prints two tables)
 """
 

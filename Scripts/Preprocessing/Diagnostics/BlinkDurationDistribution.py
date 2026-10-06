@@ -11,7 +11,7 @@ tail; the chosen cap should sit in the trough between them.
 Reads the raw .asc files directly, so it needs no pipeline run. From the project root:
     python3 Scripts/Preprocessing/Diagnostics/BlinkDurationDistribution.py
 
-Writes (under DataQualityChecks/blink_interpolation/):
+Writes (under Data_Quality_Checks/<dataset>/blink_interpolation/):
     blink_duration_distribution.csv   - histogram bins + summary percentiles
     blink_duration_histogram.png
 """
@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import Settings as settings
 from Scripts.Preprocessing.FileParsing import parse_blink_intervals
 
-OUT = Path("DataQualityChecks/blink_interpolation"); OUT.mkdir(parents=True, exist_ok=True)
+OUT = Path(settings.data_quality_folder, "blink_interpolation"); OUT.mkdir(parents=True, exist_ok=True)
 CAP = settings.MAX_BLINK_INTERP_MS  # the interpolation cap this diagnostic is checking
 
 def main():

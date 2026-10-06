@@ -19,8 +19,8 @@ implementation: round-half-away-from-zero, 1-based pixel indexing, imgaussfilt-e
 blurring, and population (not sample) SD for z-normalisation.
 
 Reads:  data/NSS_all_fixations_clean.parquet     (NSSExporter.py)
-Writes: analysesresults/NSS[_suffix]/FixMaps_full.pkl, NSS_WithinPhase.pkl + .csv
-        analysesresults/NSS_<mode>[_suffix]/NSS_crossphase_descriptives.pkl + .csv
+Writes: Analysis_Results/NSS[_suffix]/FixMaps_full.pkl, NSS_WithinPhase.pkl + .csv
+        Analysis_Results/NSS_<mode>[_suffix]/NSS_crossphase_descriptives.pkl + .csv
         (paths resolved at runtime by NSSPaths.select())
 """
 
@@ -641,7 +641,7 @@ def calculate_NSS_crossphase(
 if __name__ == "__main__":
     # Pick the Mooney-window mode (prompt or $MOONEY_SPLIT) and resolve output paths.
     # FixMaps + within-phase are shared across modes; cross-phase outputs go to
-    # analysesresults/NSS_<mode>/ so whole and halves runs never overwrite each other.
+    # Analysis_Results/NSS_<mode>/ so whole and halves runs never overwrite each other.
     from Scripts.Analysis.NSS import NSSPaths
     _P = NSSPaths.select()
     MOONEY_SPLIT = _P["MOONEY_SPLIT"]

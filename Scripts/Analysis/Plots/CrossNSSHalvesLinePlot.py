@@ -33,21 +33,21 @@ def darken(color, factor=0.55):
 # Which dataset this figure is built from  (must be set before Settings is imported,
 # the same toggle and the same reason as CompleteRun.py's). Everything follows from it:
 # the parquet and results folder read, and the Figures[_rep]/ folder written.
-#   "data"     the pilot in data/            -> Figures/
-#   "data_rep" the replication in data_rep/  -> Figures_rep/
+#   "data_pilot" the pilot in Data.nosync/pilot/   -> Figures/pilot/
+#   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
 import os
-DATASET = "data_rep"   # "data" | "data_rep"
-os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+DATASET = "data_rep"   # "data_pilot" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings
-from Settings import _SUFFIX as DATASET_SUFFIX
+from Settings import FIGURES_ROOT
 
 # Relative to the project root, like every other plot script (run them from there).
 # The EMMs below are pasted from one fitted model, so repaste them when switching
 # dataset: the toggle moves the figure, it cannot move the numbers.
-OUT = Path(f"Figures{DATASET_SUFFIX}/nss_separated_analyses/CrossNSSHalvesLinePlot.png")
+OUT = Path(f"{FIGURES_ROOT}/nss_separated_analyses/CrossNSSHalvesLinePlot.png")
 
 AWARENESS_ORDER = ["conscious_aware", "unconscious_aware", "unconscious_unaware"]
 HALVES = ["First_Half", "Second_Half"]

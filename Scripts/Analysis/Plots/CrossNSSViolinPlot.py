@@ -8,12 +8,12 @@
 A whole-window figure with no Early/Late dimension, so it always reads the whole-mode
 results (the halves comparison has its own plot, CrossNSSHalvesLinePlot.py). It takes the
 trial set and blink mode from Settings.py and suffixes the output PNG to match, and the
-DATASET toggle at the top picks pilot or replication: "data_rep" reads analysesresults_rep/
-and writes to Figures_rep/ with a _rep suffix, so pilot and replication figures never mix.
+DATASET toggle at the top picks pilot or replication: "data_rep" reads Analysis_Results/rep/
+and writes to Figures/rep/ with a _rep suffix, so pilot and replication figures never mix.
 The model EMM diamonds are hand-pasted from one specific lmer fit, so DRAW_EMMS is off
 by default.
 
-Reads:  analysesresults[_rep]/NSS_whole[_suffix]/NSS_CrossPhase_LongFormat.csv   (NSS.py)
+Reads:  Analysis_Results/<dataset>/NSS_whole[_suffix]/NSS_CrossPhase_LongFormat.csv   (NSS.py)
 Writes: Figures[_rep]/nss_analyses/NSS_CrossPhase_Violin_byAwareness*.png
 """
 
@@ -26,14 +26,14 @@ from pathlib import Path
 # === CONFIG ===
 # Which dataset to plot, the same toggle CompleteRun.py has and for the same reason:
 # it has to be set before Settings is imported, so it sits above the imports below.
-#   "data"     the pilot in data/,           analysesresults/  -> Figures/
-#   "data_rep" the replication in data_rep/, analysesresults_rep/ -> Figures_rep/
+#   "data_pilot" the pilot in Data.nosync/pilot/,   Analysis_Results/pilot/ -> Figures/pilot/
+#   "data_rep" the replication in Data.nosync/rep/, Analysis_Results/rep/ -> Figures/rep/
 # setdefault, not assignment: an EYESPY_DATASET already in the environment (a one-off
 # `EYESPY_DATASET=rep python3 ...`, or a parent script) still wins, matching how the
 # trial set and blink mode treat their own env vars.
 import os
-DATASET = "data_rep"   # "data" | "data_rep"
-os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "")
+DATASET = "data_rep"   # "data_pilot" | "data_rep"
+os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 # Toggle which sessions to plot:
 #   True  -> only the unconscious session (Unconscious Aware + Unconscious Unaware)
@@ -45,15 +45,15 @@ UNCONSCIOUS_ONLY = True
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for the imports below
 from Scripts.Analysis.NSS import NSSPaths
-from Settings import _SUFFIX as DATASET_SUFFIX  # "" for the pilot, "_rep" under EYESPY_DATASET=rep
+from Settings import _SUFFIX as DATASET_SUFFIX, FIGURES_ROOT  # "_pilot" or "_rep", per EYESPY_DATASET
 TRIAL_SET = NSSPaths.ask_trial_set()
 BLINK_MODE = NSSPaths.ask_blink_mode()  # filter (original) / interp (PCHIP); picks the *_interp folder
 
 # No Early/Late dimension here, so always the whole-mode results.
 INPUT_FILE  = NSSPaths.paths_for("whole", TRIAL_SET, BLINK_MODE)["CROSS_CSV"]
-# Replication figures go to Figures_rep/ and carry a _rep filename suffix, so a rep run
+# Replication figures go to Figures/rep/ and carry a _rep filename suffix, so a rep run
 # can never overwrite (or be mistaken for) the pilot figure of the same mode.
-OUTPUT_DIR  = Path(f"Figures{DATASET_SUFFIX}/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR  = Path(f"{FIGURES_ROOT}/nss_analyses") ; OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 _SUFFIX = NSSPaths.TRIAL_SET_SUFFIX[TRIAL_SET] + NSSPaths.BLINK_SUFFIX[BLINK_MODE] + DATASET_SUFFIX
 OUTPUT_PLOT = OUTPUT_DIR / (
     f"NSS_CrossPhase_Violin_byAwareness_unconsciousOnly{_SUFFIX}.png"
