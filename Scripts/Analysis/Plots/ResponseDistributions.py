@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 #   "data_rep" the replication in Data.nosync/rep/  -> Figures/rep/
 # setdefault, not assignment, so an explicit `EYESPY_DATASET=rep python3 ...` still wins.
 import os
-DATASET = "data_rep"   # "data_pilot" | "data_rep"
+DATASET = "data_pilot"   # "data_pilot" | "data_rep"
 os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # project root, for Settings

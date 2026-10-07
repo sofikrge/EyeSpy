@@ -32,7 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # one-off `EYESPY_DATASET=rep python3 ...` still wins.
 #   "data_pilot" the pilot set in Data.nosync/pilot/,   Settings.py + Settings_pilot.py on top
 #   "data_rep"   the replication set in Data.nosync/rep/, Settings.py + Settings_rep.py on top
-DATASET = "data_rep"   # "data_pilot" | "data_rep"
+DATASET = "data_pilot"   # "data_pilot" | "data_rep"
 os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 from Scripts.Analysis.NSS import NSSPaths

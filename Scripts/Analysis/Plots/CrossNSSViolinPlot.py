@@ -32,13 +32,13 @@ from pathlib import Path
 # `EYESPY_DATASET=rep python3 ...`, or a parent script) still wins, matching how the
 # trial set and blink mode treat their own env vars.
 import os
-DATASET = "data_rep"   # "data_pilot" | "data_rep"
+DATASET = "data_pilot"   # "data_pilot" | "data_rep"
 os.environ.setdefault("EYESPY_DATASET", "rep" if DATASET == "data_rep" else "pilot")
 
 # Toggle which sessions to plot:
 #   True  -> only the unconscious session (Unconscious Aware + Unconscious Unaware)
 #   False -> all three groups (Conscious Aware + both unconscious groups)
-UNCONSCIOUS_ONLY = True
+UNCONSCIOUS_ONLY = False
 
 # Trial set and blink mode come from Settings.py (or the $TRIAL_SET / $BLINK_MODE env
 # vars) and pick which whole-mode results folder is read.

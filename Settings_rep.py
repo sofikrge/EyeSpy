@@ -26,7 +26,7 @@ EYE_OFFSET = {"left": +5.31, "right": -5.31}   # horizontal eye offset, visual d
 IMAGE_SIZE_DEG = (10.00, 7.51)                 # stimulus extent, visual degrees
 
 # Exclusions: all three must be defined here, even when empty, since Settings.py has none.
-EXCLUDE_SUBJECTS = [103, 109, 120, 132    # not enough PAS 0 trials, for 109 Talya also turned on light mid block IDK when exactly
+EXCLUDE_SUBJECTS = [103, 109, 120, 132, 136, 138    # not enough PAS 0 trials, for 109 Talya also turned on light mid block IDK when exactly
 ]
 
 # Whole sessions, format: { ParticipantID: ['SessionLetter'] }

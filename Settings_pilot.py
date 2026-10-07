@@ -27,14 +27,14 @@ EXCLUDE_SUBJECTS = [
 
 # Whole sessions, format: { ParticipantID: ['SessionLetter'] }
 EXCLUDE_SESSIONS = {
-#    104: ['U'], # unfocused eyes sometimes
-#    105: ['U'], # unfocused eyes sometimes
-#    106: ['U'], # unfocused eyes sometimes
+    104: ['U'], # unfocused eyes sometimes
+    105: ['U'], # unfocused eyes sometimes
+    106: ['U'], # unfocused eyes sometimes
     107: ['U'], # low PAS 0 trials
     111: ['U'], # low PAS 0 trials
     110: ['U'], # low PAS 0 trials
     118: ['U'], # low PAS 0 trials
-#    112: ['C'], # unfocused eyes sometimes
+    112: ['C'], # unfocused eyes sometimes
 }
 
 # Single blocks, format: { ParticipantID: { 'SessionLetter': [BlockNums] } }
@@ -44,7 +44,7 @@ EXCLUDE_SESSIONS = {
 # that column; TrialMetadata.apply_behavioral_filters_and_save translates them, and warns
 # about any number the session does not actually have.
 EXCLUDE_BLOCKS = {
-#    112: {'U': [4, 5]},             # Unfocused eyes sometimes
+    112: {'U': [4, 5]},             # Unfocused eyes sometimes
     117: {'C': [1]},                # Technical mistake
     119: {'U': [1, 2, 3, 4, 5, 6]}  # Unfocused eyes sometimes
 }
